@@ -422,3 +422,7 @@ ParsedTargetAttr RISCVTargetInfo::parseTargetAttr(StringRef Features) const {
 bool RISCVTargetInfo::validateCpuSupports(StringRef FeatureStr) const {
   return ISAInfo->isSupportedExtensionFeature(FeatureStr);
 }
+
+unsigned RISCVTargetInfo::multiVersionSortPriority(StringRef Name) const {
+  return llvm::RISCVISAInfo::getExtensionSerial(Name);
+}
