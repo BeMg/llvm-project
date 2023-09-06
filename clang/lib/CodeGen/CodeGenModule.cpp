@@ -3992,7 +3992,10 @@ void CodeGenModule::emitMultiVersionFunctions() {
             if (CurFD->getMultiVersionKind() == MultiVersionKind::Target) {
               const auto *TA = CurFD->getAttr<TargetAttr>();
               llvm::SmallVector<StringRef, 8> Feats;
-              TA->getAddedFeatures(Feats);
+              if (getTarget().getTriple().isRISCV())
+                Feats.push_back(TA->getFeaturesStr());
+              else
+                TA->getAddedFeatures(Feats);
               Options.emplace_back(cast<llvm::Function>(Func),
                                    TA->getArchitecture(), Feats);
             } else {
