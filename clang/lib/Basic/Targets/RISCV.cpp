@@ -260,7 +260,7 @@ collectNonISAExtFeature(ArrayRef<std::string> FeaturesNeedOverride, int XLen) {
 static std::vector<std::string>
 resolveTargetAttrOverride(const std::vector<std::string> &FeaturesVec,
                           int XLen) {
-  auto I = llvm::find(FeaturesVec, "__RISCV_TargetAttrNeedOverride");
+  auto I = llvm::find(FeaturesVec, "+__RISCV_TargetAttrNeedOverride");
   if (I == FeaturesVec.end())
     return FeaturesVec;
 
@@ -405,7 +405,7 @@ void RISCVTargetInfo::fillValidTuneCPUList(
 
 static void handleFullArchString(StringRef FullArchStr,
                                  std::vector<std::string> &Features) {
-  Features.push_back("__RISCV_TargetAttrNeedOverride");
+  Features.push_back("+__RISCV_TargetAttrNeedOverride");
   auto RII = llvm::RISCVISAInfo::parseArchString(
       FullArchStr, /* EnableExperimentalExtension */ true);
   if (!RII) {
@@ -479,4 +479,17 @@ ParsedTargetAttr RISCVTargetInfo::parseTargetAttr(StringRef Features) const {
     }
   }
   return Ret;
+}
+
+bool RISCVTargetInfo::validateCpuSupports(StringRef FeatureStr) const {
+  if (FeatureStr == "__RISCV_TargetAttrNeedOverride")
+    return true;
+  return ISAInfo->isSupportedExtensionFeature(FeatureStr);
+}
+
+bool RISCVTargetInfo::validateCpuIs(StringRef FeatureStr) const {
+  StringRef MarchFromCPU = llvm::RISCV::getMArchFromMcpu(FeatureStr);
+  if (MarchFromCPU.empty())
+    return false;
+  return true;
 }
