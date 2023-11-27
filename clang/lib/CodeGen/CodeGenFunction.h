@@ -4916,6 +4916,10 @@ public:
   void
   EmitAArch64MultiVersionResolver(llvm::Function *Resolver,
                                   ArrayRef<MultiVersionResolverOption> Options);
+  void
+  EmitRISCVMultiVersionResolver(llvm::Function *Resolver,
+                                ArrayRef<MultiVersionResolverOption> Options);
+  llvm::Value *EmitRISCVCheckFeatureFunc(std::string currFeats);
 
 private:
   QualType getVarArgType(const Expr *Arg);

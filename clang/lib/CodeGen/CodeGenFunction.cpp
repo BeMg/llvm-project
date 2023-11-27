@@ -2732,6 +2732,10 @@ void CodeGenFunction::EmitMultiVersionResolver(
   case llvm::Triple::aarch64:
     EmitAArch64MultiVersionResolver(Resolver, Options);
     return;
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
+    EmitRISCVMultiVersionResolver(Resolver, Options);
+    return;
 
   default:
     assert(false && "Only implemented for x86 and AArch64 targets");
@@ -2813,6 +2817,87 @@ void CodeGenFunction::EmitX86MultiVersionResolver(
                                      SupportsIFunc);
     CurBlock = createBasicBlock("resolver_else", Resolver);
     Builder.CreateCondBr(Condition, RetBlock, CurBlock);
+  }
+
+  // If no generic/default, emit an unreachable.
+  Builder.SetInsertPoint(CurBlock);
+  llvm::CallInst *TrapCall = EmitTrapCall(llvm::Intrinsic::trap);
+  TrapCall->setDoesNotReturn();
+  TrapCall->setDoesNotThrow();
+  Builder.CreateUnreachable();
+  Builder.ClearInsertionPoint();
+}
+
+llvm::Value *
+CodeGenFunction::EmitRISCVCheckFeatureFunc(std::string CurrFeatStr) {
+  llvm::Constant *FeatStr = Builder.CreateGlobalString(CurrFeatStr);
+  llvm::Type *Args[] = {Int8PtrTy};
+  llvm::FunctionType *FTy =
+      llvm::FunctionType::get(Builder.getInt1Ty(), Args, /*Variadic*/ false);
+  llvm::FunctionCallee Func =
+      CGM.CreateRuntimeFunction(FTy, "__riscv_ifunc_select");
+  cast<llvm::GlobalValue>(Func.getCallee())->setDSOLocal(true);
+  cast<llvm::GlobalValue>(Func.getCallee())
+      ->setDLLStorageClass(llvm::GlobalValue::DefaultStorageClass);
+  return Builder.CreateCall(Func, FeatStr);
+}
+
+void CodeGenFunction::EmitRISCVMultiVersionResolver(
+    llvm::Function *Resolver, ArrayRef<MultiVersionResolverOption> Options) {
+  llvm::BasicBlock *CurBlock = createBasicBlock("resolver_entry", Resolver);
+  Builder.SetInsertPoint(CurBlock);
+
+  bool SupportsIFunc = getContext().getTargetInfo().supportsIFunc();
+  bool HasDefault = false;
+  int DefaultIndex = 0;
+  // Check the each candidate function.
+  for (unsigned Index = 0; Index < Options.size(); Index++) {
+    Builder.SetInsertPoint(CurBlock);
+
+    std::vector<std::string> TargetAttrFeats =
+        getContext()
+            .getTargetInfo()
+            .parseTargetAttr(Options[Index].Conditions.Features[0])
+            .Features;
+
+    if (!TargetAttrFeats.empty()) {
+      // If this function doens't need override, then merge with module level
+      // target features. Otherwise, remain the current target features.
+      auto I = llvm::find(TargetAttrFeats, "+__RISCV_TargetAttrNeedOverride");
+      if (I == TargetAttrFeats.end())
+        TargetAttrFeats.insert(TargetAttrFeats.begin(),
+                               Target.getTargetOpts().FeaturesAsWritten.begin(),
+                               Target.getTargetOpts().FeaturesAsWritten.end());
+      else
+        TargetAttrFeats.erase(I);
+
+      // Join with ';' delimiter
+      std::string CurrFeatStr = std::accumulate(
+          std::begin(TargetAttrFeats), std::end(TargetAttrFeats), std::string(),
+          [](const std::string &a, const std::string &b) {
+            return a.empty() ? b.substr(1) : a + ";" + b.substr(1);
+          });
+
+      llvm::Value *Condition = EmitRISCVCheckFeatureFunc(CurrFeatStr);
+      llvm::BasicBlock *RetBlock =
+          createBasicBlock("resolver_return", Resolver);
+      CGBuilderTy RetBuilder(*this, RetBlock);
+      CreateMultiVersionResolverReturn(CGM, Resolver, RetBuilder,
+                                       Options[Index].Function, SupportsIFunc);
+      CurBlock = createBasicBlock("resolver_else", Resolver);
+      Builder.CreateCondBr(Condition, RetBlock, CurBlock);
+    } else {
+      HasDefault = true;
+      DefaultIndex = Index;
+    }
+  }
+
+  // Finally, emit the default one.
+  if (HasDefault) {
+    Builder.SetInsertPoint(CurBlock);
+    CreateMultiVersionResolverReturn(
+        CGM, Resolver, Builder, Options[DefaultIndex].Function, SupportsIFunc);
+    return;
   }
 
   // If no generic/default, emit an unreachable.

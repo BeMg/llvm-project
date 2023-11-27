@@ -1702,7 +1702,7 @@ static void AppendTargetMangling(const CodeGenModule &CGM,
   Out << '.';
   const TargetInfo &Target = CGM.getTarget();
   ParsedTargetAttr Info = Target.parseTargetAttr(Attr->getFeaturesStr());
-  llvm::sort(Info.Features, [&Target](StringRef LHS, StringRef RHS) {
+  llvm::stable_sort(Info.Features, [&Target](StringRef LHS, StringRef RHS) {
     // Multiversioning doesn't allow "no-${feature}", so we can
     // only have "+" prefixes here.
     assert(LHS.startswith("+") && RHS.startswith("+") &&
@@ -4088,7 +4088,10 @@ void CodeGenModule::emitMultiVersionFunctions() {
             if (CurFD->getMultiVersionKind() == MultiVersionKind::Target) {
               const auto *TA = CurFD->getAttr<TargetAttr>();
               llvm::SmallVector<StringRef, 8> Feats;
-              TA->getAddedFeatures(Feats);
+              if (getTarget().getTriple().isRISCV())
+                Feats.push_back(TA->getFeaturesStr());
+              else
+                TA->getAddedFeatures(Feats);
               Options.emplace_back(cast<llvm::Function>(Func),
                                    TA->getArchitecture(), Feats);
             } else {
