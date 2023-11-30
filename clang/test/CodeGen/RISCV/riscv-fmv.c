@@ -6,18 +6,17 @@
 // RUN:  -emit-llvm %s -o - | FileCheck %s                   \
 // RUN:  --check-prefix=CHECK-IR
 
-__attribute__((target("arch=+v"))) void test1(void) {}
+__attribute__((target("arch=+v;tune=generic-rv64"))) void test1(void) {}
 __attribute__((target("arch=+v,+zbb"))) void test1(void) {}
 __attribute__((target("arch=+v,+zbb,+zicond1p0"))) void test1(void) {}
+__attribute__((target("cpu=sifive-u54"))) void test1(void) {}
+__attribute__((target("cpu=sifive-u54;arch=+zba"))) void test1(void) {}
 __attribute__((target("arch=rv64gc"))) void test1(void) {}
 __attribute__((target("default"))) void test1(void) {}
 
 __attribute__((target("default"))) void test2(void) {}
 
 void test3() { test1(); test2(); }
-
-
-
 
 // CHECK-IR-LABEL: define dso_local void @test1.v
 // CHECK-IR-SAME: () #[[ATTR0:[0-9]+]] {
@@ -37,26 +36,38 @@ void test3() { test1(); test2(); }
 // CHECK-IR-NEXT:    ret void
 //
 //
-// CHECK-IR-LABEL: define dso_local void @test1.__RISCV_TargetAttrNeedOverride_m_a_f_d_c_zicsr_zifencei
+// CHECK-IR-LABEL: define dso_local void @test1.arch_sifive-u54___RISCV_TargetAttrNeedOverride_m_a_f_d_c_zicsr_zifencei
 // CHECK-IR-SAME: () #[[ATTR3:[0-9]+]] {
 // CHECK-IR-NEXT:  entry:
 // CHECK-IR-NEXT:    ret void
 //
 //
-// CHECK-IR-LABEL: define dso_local void @test1
+// CHECK-IR-LABEL: define dso_local void @test1.arch_sifive-u54_zba
 // CHECK-IR-SAME: () #[[ATTR4:[0-9]+]] {
 // CHECK-IR-NEXT:  entry:
 // CHECK-IR-NEXT:    ret void
 //
 //
+// CHECK-IR-LABEL: define dso_local void @test1.__RISCV_TargetAttrNeedOverride_m_a_f_d_c_zicsr_zifencei
+// CHECK-IR-SAME: () #[[ATTR5:[0-9]+]] {
+// CHECK-IR-NEXT:  entry:
+// CHECK-IR-NEXT:    ret void
+//
+//
+// CHECK-IR-LABEL: define dso_local void @test1
+// CHECK-IR-SAME: () #[[ATTR6:[0-9]+]] {
+// CHECK-IR-NEXT:  entry:
+// CHECK-IR-NEXT:    ret void
+//
+//
 // CHECK-IR-LABEL: define dso_local void @test2
-// CHECK-IR-SAME: () #[[ATTR4]] {
+// CHECK-IR-SAME: () #[[ATTR6]] {
 // CHECK-IR-NEXT:  entry:
 // CHECK-IR-NEXT:    ret void
 //
 //
 // CHECK-IR-LABEL: define dso_local void @test3
-// CHECK-IR-SAME: () #[[ATTR4]] {
+// CHECK-IR-SAME: () #[[ATTR6]] {
 // CHECK-IR-NEXT:  entry:
 // CHECK-IR-NEXT:    call void @test1.resolver()
 // CHECK-IR-NEXT:    call void @test2.resolver()
@@ -86,9 +97,21 @@ void test3() { test1(); test2(); }
 // CHECK-IR-NEXT:    [[TMP3:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB3:[0-9]+]])
 // CHECK-IR-NEXT:    br i1 [[TMP3]], label [[RESOLVER_RETURN5:%.*]], label [[RESOLVER_ELSE6:%.*]]
 // CHECK-IR:       resolver_return5:
-// CHECK-IR-NEXT:    musttail call void @test1.__RISCV_TargetAttrNeedOverride_m_a_f_d_c_zicsr_zifencei()
+// CHECK-IR-NEXT:    musttail call void @test1.arch_sifive-u54___RISCV_TargetAttrNeedOverride_m_a_f_d_c_zicsr_zifencei()
 // CHECK-IR-NEXT:    ret void
 // CHECK-IR:       resolver_else6:
+// CHECK-IR-NEXT:    [[TMP4:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB4:[0-9]+]])
+// CHECK-IR-NEXT:    br i1 [[TMP4]], label [[RESOLVER_RETURN7:%.*]], label [[RESOLVER_ELSE8:%.*]]
+// CHECK-IR:       resolver_return7:
+// CHECK-IR-NEXT:    musttail call void @test1.arch_sifive-u54_zba()
+// CHECK-IR-NEXT:    ret void
+// CHECK-IR:       resolver_else8:
+// CHECK-IR-NEXT:    [[TMP5:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB5:[0-9]+]])
+// CHECK-IR-NEXT:    br i1 [[TMP5]], label [[RESOLVER_RETURN9:%.*]], label [[RESOLVER_ELSE10:%.*]]
+// CHECK-IR:       resolver_return9:
+// CHECK-IR-NEXT:    musttail call void @test1.__RISCV_TargetAttrNeedOverride_m_a_f_d_c_zicsr_zifencei()
+// CHECK-IR-NEXT:    ret void
+// CHECK-IR:       resolver_else10:
 // CHECK-IR-NEXT:    musttail call void @test1()
 // CHECK-IR-NEXT:    ret void
 //

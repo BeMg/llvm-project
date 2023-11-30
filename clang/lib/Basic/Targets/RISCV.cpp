@@ -488,3 +488,10 @@ bool RISCVTargetInfo::validateCpuSupports(StringRef FeatureStr) const {
     return true;
   return ISAInfo->isSupportedExtensionFeature(FeatureStr);
 }
+
+bool RISCVTargetInfo::validateCpuIs(StringRef FeatureStr) const {
+  StringRef MarchFromCPU = llvm::RISCV::getMArchFromMcpu(FeatureStr);
+  if (MarchFromCPU.empty())
+    return false;
+  return true;
+}
