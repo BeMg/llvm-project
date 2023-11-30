@@ -18,8 +18,16 @@ __attribute__((target("default"))) void test2(void) {}
 
 __attribute__((target_clones("default", "arch=rv64gc", "cpu=sifive-u54", "cpu=sifive-u54;arch=+zbb"))) void test3(void) {}
 
+__attribute__((target_version("arch=+v;tune=generic-rv64"))) void test4(void) {}
+__attribute__((target_version("arch=+v,+zbb"))) void test4(void) {}
+__attribute__((target_version("arch=+v,+zbb,+zicond1p0"))) void test4(void) {}
+__attribute__((target_version("cpu=sifive-u54"))) void test4(void) {}
+__attribute__((target_version("cpu=sifive-u54;arch=+zba"))) void test4(void) {}
+__attribute__((target_version("arch=rv64gc"))) void test4(void) {}
+__attribute__((target_version("default"))) void test4(void) {}
 
-void foo() { test1(); test2(); test3();}
+
+void foo() { test1(); test2(); test3(); test4();}
 
 // CHECK-IR-LABEL: define dso_local void @test1.v
 // CHECK-IR-SAME: () #[[ATTR0:[0-9]+]] {
@@ -105,12 +113,19 @@ void foo() { test1(); test2(); test3();}
 // CHECK-IR-NEXT:    ret void
 //
 //
+// CHECK-IR-LABEL: define dso_local void @test4
+// CHECK-IR-SAME: () #[[ATTR6]] {
+// CHECK-IR-NEXT:  entry:
+// CHECK-IR-NEXT:    ret void
+//
+//
 // CHECK-IR-LABEL: define dso_local void @foo
 // CHECK-IR-SAME: () #[[ATTR6]] {
 // CHECK-IR-NEXT:  entry:
 // CHECK-IR-NEXT:    call void @test1.resolver()
 // CHECK-IR-NEXT:    call void @test2.resolver()
 // CHECK-IR-NEXT:    call void @test3()
+// CHECK-IR-NEXT:    call void @test4.resolver()
 // CHECK-IR-NEXT:    ret void
 //
 //
@@ -159,5 +174,47 @@ void foo() { test1(); test2(); test3();}
 // CHECK-IR-LABEL: define weak_odr void @test2.resolver() comdat {
 // CHECK-IR-NEXT:  resolver_entry:
 // CHECK-IR-NEXT:    musttail call void @test2()
+// CHECK-IR-NEXT:    ret void
+//
+//
+// CHECK-IR-LABEL: define weak_odr void @test4.resolver() comdat {
+// CHECK-IR-NEXT:  resolver_entry:
+// CHECK-IR-NEXT:    [[TMP0:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB9:[0-9]+]])
+// CHECK-IR-NEXT:    br i1 [[TMP0]], label [[RESOLVER_RETURN:%.*]], label [[RESOLVER_ELSE:%.*]]
+// CHECK-IR:       resolver_return:
+// CHECK-IR-NEXT:    musttail call void @"test4._March=Mv
+// CHECK-IR-NEXT:    ret void
+// CHECK-IR:       resolver_else:
+// CHECK-IR-NEXT:    [[TMP1:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB10:[0-9]+]])
+// CHECK-IR-NEXT:    br i1 [[TMP1]], label [[RESOLVER_RETURN1:%.*]], label [[RESOLVER_ELSE2:%.*]]
+// CHECK-IR:       resolver_return1:
+// CHECK-IR-NEXT:    musttail call void @"test4._March=Mv,Mzbb"()
+// CHECK-IR-NEXT:    ret void
+// CHECK-IR:       resolver_else2:
+// CHECK-IR-NEXT:    [[TMP2:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB11:[0-9]+]])
+// CHECK-IR-NEXT:    br i1 [[TMP2]], label [[RESOLVER_RETURN3:%.*]], label [[RESOLVER_ELSE4:%.*]]
+// CHECK-IR:       resolver_return3:
+// CHECK-IR-NEXT:    musttail call void @"test4._March=Mv,Mzbb,Mzicond1p0"()
+// CHECK-IR-NEXT:    ret void
+// CHECK-IR:       resolver_else4:
+// CHECK-IR-NEXT:    [[TMP3:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB12:[0-9]+]])
+// CHECK-IR-NEXT:    br i1 [[TMP3]], label [[RESOLVER_RETURN5:%.*]], label [[RESOLVER_ELSE6:%.*]]
+// CHECK-IR:       resolver_return5:
+// CHECK-IR-NEXT:    musttail call void @"test4._Mcpu=sifive-u54"()
+// CHECK-IR-NEXT:    ret void
+// CHECK-IR:       resolver_else6:
+// CHECK-IR-NEXT:    [[TMP4:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB13:[0-9]+]])
+// CHECK-IR-NEXT:    br i1 [[TMP4]], label [[RESOLVER_RETURN7:%.*]], label [[RESOLVER_ELSE8:%.*]]
+// CHECK-IR:       resolver_return7:
+// CHECK-IR-NEXT:    musttail call void @"test4._Mcpu=sifive-u54
+// CHECK-IR-NEXT:    ret void
+// CHECK-IR:       resolver_else8:
+// CHECK-IR-NEXT:    [[TMP5:%.*]] = call i1 @__riscv_ifunc_select(ptr @[[GLOB14:[0-9]+]])
+// CHECK-IR-NEXT:    br i1 [[TMP5]], label [[RESOLVER_RETURN9:%.*]], label [[RESOLVER_ELSE10:%.*]]
+// CHECK-IR:       resolver_return9:
+// CHECK-IR-NEXT:    musttail call void @"test4._March=rv64gc"()
+// CHECK-IR-NEXT:    ret void
+// CHECK-IR:       resolver_else10:
+// CHECK-IR-NEXT:    musttail call void @test4()
 // CHECK-IR-NEXT:    ret void
 //

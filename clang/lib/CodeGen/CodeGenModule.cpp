@@ -4126,7 +4126,18 @@ void CodeGenModule::emitMultiVersionFunctions() {
             } else {
               const auto *TVA = CurFD->getAttr<TargetVersionAttr>();
               llvm::SmallVector<StringRef, 8> Feats;
-              TVA->getFeatures(Feats);
+              if (getTarget().getTriple().isRISCV()) {
+                llvm::AttrBuilder FuncAttrs(Func->getContext());
+                ParsedTargetAttr PTA =
+                    getTarget().parseTargetAttr(TVA->getName());
+                if (!PTA.CPU.empty())
+                  FuncAttrs.addAttribute("target-cpu", PTA.CPU);
+                if (!PTA.Tune.empty())
+                  FuncAttrs.addAttribute("tune-cpu", PTA.Tune);
+                dyn_cast<llvm::Function>(Func)->addFnAttrs(FuncAttrs);
+                Feats.push_back(TVA->getName());
+              } else
+                TVA->getFeatures(Feats);
               Options.emplace_back(cast<llvm::Function>(Func),
                                    /*Architecture*/ "", Feats);
             }

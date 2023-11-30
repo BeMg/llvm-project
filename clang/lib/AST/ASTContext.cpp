@@ -13538,7 +13538,14 @@ void ASTContext::getFunctionFeatureMap(llvm::StringMap<bool> &FeatureMap,
     }
     Target->initFeatureMap(FeatureMap, getDiagnostics(), TargetCPU, Features);
   } else if (const auto *TV = FD->getAttr<TargetVersionAttr>()) {
-    std::vector<std::string> Feats = filterFunctionTargetVersionAttrs(TV);
+    std::vector<std::string> Feats;
+    if (Target->getTriple().isRISCV()) {
+      ParsedTargetAttr ParsedAttr = Target->parseTargetAttr(TV->getName());
+      Feats.insert(Feats.begin(), ParsedAttr.Features.begin(),
+                   ParsedAttr.Features.end());
+    } else {
+      Feats = filterFunctionTargetVersionAttrs(TV);
+    }
     Feats.insert(Feats.begin(),
                  Target->getTargetOpts().FeaturesAsWritten.begin(),
                  Target->getTargetOpts().FeaturesAsWritten.end());
