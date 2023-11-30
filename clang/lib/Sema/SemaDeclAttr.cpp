@@ -3603,6 +3603,32 @@ bool Sema::checkTargetClonesAttrString(
           HasNotDefault = true;
         }
       }
+    } else if (TInfo.getTriple().isRISCV()) {
+
+      if (Str.startswith("arch=") || Str.startswith("cpu=") ||
+          Str.startswith("tune=")) {
+
+        if ((!Cur.startswith("arch=") && !Cur.startswith("cpu=") &&
+             !Cur.startswith("tune=")))
+          continue;
+
+        ParsedTargetAttr TargetAttr =
+            Context.getTargetInfo().parseTargetAttr(Str);
+        if (TargetAttr.Features.empty())
+          return Diag(CurLoc, diag::warn_unsupported_target_attribute)
+                 << Unsupported << CPU << Str.drop_front(sizeof("arch=") - 1)
+                 << TargetClones;
+      } else if (Str == "default") {
+        DefaultIsDupe = HasDefault;
+        HasDefault = true;
+      } else {
+        return Diag(CurLoc, diag::warn_unsupported_target_attribute)
+               << Unsupported << None << Str << TargetClones;
+      }
+      if (llvm::is_contained(StringsBuffer, Str) || DefaultIsDupe)
+        Diag(CurLoc, diag::warn_target_clone_duplicate_options);
+      // Note: Add even if there are duplicates, since it changes name mangling.
+      StringsBuffer.push_back(Str);
     } else {
       // Other targets ( currently X86 )
       if (Cur.startswith("arch=")) {

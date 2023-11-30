@@ -13524,6 +13524,18 @@ void ASTContext::getFunctionFeatureMap(llvm::StringMap<bool> &FeatureMap,
       Features.insert(Features.begin(),
                       Target->getTargetOpts().FeaturesAsWritten.begin(),
                       Target->getTargetOpts().FeaturesAsWritten.end());
+    } else if (Target->getTriple().isRISCV()) {
+      if (VersionStr != "default") {
+        // Treat element of target_clones as target attribute string.
+        ParsedTargetAttr ParsedAttr = Target->parseTargetAttr(VersionStr);
+        Features.insert(Features.begin(), ParsedAttr.Features.begin(),
+                        ParsedAttr.Features.end());
+        if (ParsedAttr.CPU != "" && Target->isValidCPUName(ParsedAttr.CPU))
+          TargetCPU = ParsedAttr.CPU;
+      }
+      Features.insert(Features.begin(),
+                      Target->getTargetOpts().FeaturesAsWritten.begin(),
+                      Target->getTargetOpts().FeaturesAsWritten.end());
     } else {
       if (VersionStr.startswith("arch="))
         TargetCPU = VersionStr.drop_front(sizeof("arch=") - 1);
