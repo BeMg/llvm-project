@@ -4166,6 +4166,15 @@ void CodeGenModule::emitMultiVersionFunctions() {
             for (auto &CurFeat : VerFeats)
               Feature.push_back(CurFeat.trim());
           }
+        } else if (getTarget().getTriple().isRISCV()) {
+          llvm::AttrBuilder FuncAttrs(Func->getContext());
+          ParsedTargetAttr PTA = getTarget().parseTargetAttr(Version);
+          if (!PTA.CPU.empty())
+            FuncAttrs.addAttribute("target-cpu", PTA.CPU);
+          if (!PTA.Tune.empty())
+            FuncAttrs.addAttribute("tune-cpu", PTA.Tune);
+          dyn_cast<llvm::Function>(Func)->addFnAttrs(FuncAttrs);
+          Feature.push_back(Version);
         } else {
           if (Version.startswith("arch="))
             Architecture = Version.drop_front(sizeof("arch=") - 1);
