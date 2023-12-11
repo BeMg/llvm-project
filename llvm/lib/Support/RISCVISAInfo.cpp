@@ -695,10 +695,91 @@ RISCVISAInfo::parseNormalizedArchString(StringRef Arch) {
   return std::move(ISAInfo);
 }
 
+static std::string isSupportedExt(StringRef Arch) {
+
+  if (Arch.starts_with("g") || Arch.starts_with("i") || Arch.starts_with("e"))
+    return std::string();
+
+  for (auto ExtInfo : SupportedExtensions) {
+    if (Arch.starts_with(ExtInfo.Name))
+      return ExtInfo.Name;
+  }
+
+  for (auto ExtInfo : SupportedExperimentalExtensions) {
+    if (Arch.starts_with(ExtInfo.Name))
+      return ExtInfo.Name;
+  }
+
+  return std::string();
+}
+
+// RISC-V march string require the canonical order,
+// this function transform arbitrary order into canonical order.
+static std::string normalizeArchString(StringRef Arch) {
+  SmallVector<StringRef, 1> Features;
+
+  std::map<char, bool> SingleLetterExt;
+  std::vector<std::string> MultiLetterExt;
+  std::string ArchBaseLine;
+
+  // Get the baseline
+  if (Arch.size() > 4 && Arch.starts_with("rv")) {
+    ArchBaseLine = Arch.take_front(5);
+  } else
+    return Arch.str();
+
+  StringRef CurrArch = Arch.substr(5);
+  bool SeenUnderScore = false;
+  while (!CurrArch.empty()) {
+    std::string NextExt = isSupportedExt(CurrArch);
+    if (!NextExt.empty()) {
+      SeenUnderScore = false;
+      if (NextExt.size() == 1) {
+        if (!SingleLetterExt[NextExt[0]])
+          SingleLetterExt[NextExt[0]] = true;
+        else
+          return Arch.str();
+      } else
+        MultiLetterExt.push_back(NextExt);
+      CurrArch.consume_front(NextExt);
+    } else if (CurrArch.starts_with("_")) {
+      // Duplicate underscore
+      if (SeenUnderScore)
+        return Arch.str();
+      CurrArch.consume_front("_");
+      SeenUnderScore = true;
+    } else
+      return Arch.str();
+  }
+
+  // Tail underscore
+  if (SeenUnderScore)
+    return Arch.str();
+
+  // Construct Arch string in canonical order.
+  std::string NormalizeArch = ArchBaseLine;
+
+  StringRef StdExts = AllStdExts;
+  std::string SingleLetterExts;
+  for (auto StdExt : StdExts) {
+    if (SingleLetterExt[StdExt])
+      SingleLetterExts += StdExt;
+  }
+
+  NormalizeArch += SingleLetterExts;
+
+  for (auto Ext : MultiLetterExt)
+    NormalizeArch += ("_" + Ext);
+
+  return NormalizeArch;
+}
+
 llvm::Expected<std::unique_ptr<RISCVISAInfo>>
 RISCVISAInfo::parseArchString(StringRef Arch, bool EnableExperimentalExtension,
                               bool ExperimentalExtensionVersionCheck,
                               bool IgnoreUnknown) {
+  std::string NewArchString = normalizeArchString(Arch);
+  Arch = NewArchString;
   // RISC-V ISA strings must be lowercase.
   if (llvm::any_of(Arch, isupper)) {
     return createStringError(errc::invalid_argument,
