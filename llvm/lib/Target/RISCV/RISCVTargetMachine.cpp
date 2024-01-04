@@ -328,6 +328,10 @@ static FunctionPass *createFastRVVRegisterAllocator() {
   return createFastRegisterAllocator(onlyAllocateRVVReg, false);
 }
 
+static FunctionPass *createPBQPRVVRegisterAllocator() {
+  return createDefaultPBQPRegisterAllocator(onlyAllocateRVVReg);
+}
+
 static RVVRegisterRegAlloc basicRegAllocRVVReg("basic",
                                                "basic register allocator",
                                                createBasicRVVRegisterAllocator);
@@ -337,6 +341,9 @@ static RVVRegisterRegAlloc
 
 static RVVRegisterRegAlloc fastRegAllocRVVReg("fast", "fast register allocator",
                                               createFastRVVRegisterAllocator);
+
+static RVVRegisterRegAlloc pbqpRegAllocRVVReg("pbqp", "PBQP register allocator",
+                                              createPBQPRVVRegisterAllocator);
 
 class RISCVPassConfig : public TargetPassConfig {
 public:
