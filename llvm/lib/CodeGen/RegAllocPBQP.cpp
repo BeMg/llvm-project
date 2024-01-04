@@ -118,8 +118,9 @@ public:
   static char ID;
 
   /// Construct a PBQP register allocator.
-  RegAllocPBQP(char *cPassID = nullptr)
-      : MachineFunctionPass(ID), customPassID(cPassID) {
+  RegAllocPBQP(char *cPassID = nullptr,
+               const RegClassFilterFunc F = allocateAllRegClasses)
+      : MachineFunctionPass(ID), customPassID(cPassID), ShouldAllocateClass(F) {
     initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
     initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
     initializeLiveStacksPass(*PassRegistry::getPassRegistry());
@@ -157,6 +158,8 @@ private:
   /// postponed till all the allocations are done, so its remat expr is
   /// always available for the remat of all the siblings of the original reg.
   SmallPtrSet<MachineInstr *, 32> DeadRemats;
+
+  const RegClassFilterFunc ShouldAllocateClass;
 
   /// Finds the initial set of vreg intervals to allocate.
   void findVRegIntervalsToAlloc(const MachineFunction &MF, LiveIntervals &LIS);
@@ -573,6 +576,10 @@ void RegAllocPBQP::findVRegIntervalsToAlloc(const MachineFunction &MF,
     Register Reg = Register::index2VirtReg(I);
     if (MRI.reg_nodbg_empty(Reg))
       continue;
+    const TargetRegisterClass &RC = *MRI.getRegClass(Reg);
+    if (!ShouldAllocateClass(*MRI.getTargetRegisterInfo(), RC))
+      continue;
+
     VRegsToAlloc.insert(Reg);
   }
 }
@@ -945,10 +952,15 @@ void PBQP::RegAlloc::PBQPRAGraph::printDot(raw_ostream &OS) const {
   OS << "}\n";
 }
 
-FunctionPass *llvm::createPBQPRegisterAllocator(char *customPassID) {
-  return new RegAllocPBQP(customPassID);
+FunctionPass *llvm::createPBQPRegisterAllocator(char *customPassID,
+                                                RegClassFilterFunc F) {
+  return new RegAllocPBQP(customPassID, F);
 }
 
 FunctionPass* llvm::createDefaultPBQPRegisterAllocator() {
   return createPBQPRegisterAllocator();
+}
+
+FunctionPass *llvm::createDefaultPBQPRegisterAllocator(RegClassFilterFunc F) {
+  return createPBQPRegisterAllocator(nullptr, F);
 }

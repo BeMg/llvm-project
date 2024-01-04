@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/PBQP/Math.h"
 #include "llvm/CodeGen/PBQP/ReductionRules.h"
 #include "llvm/CodeGen/PBQP/Solution.h"
+#include "llvm/CodeGen/RegAllocCommon.h"
 #include "llvm/CodeGen/Register.h"
 #include "llvm/MC/MCRegister.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -531,7 +532,8 @@ inline Solution solve(PBQPRAGraph& G) {
 
 /// Create a PBQP register allocator instance.
 FunctionPass *
-createPBQPRegisterAllocator(char *customPassID = nullptr);
+createPBQPRegisterAllocator(char *customPassID = nullptr,
+                            RegClassFilterFunc F = allocateAllRegClasses);
 
 } // end namespace llvm
 
