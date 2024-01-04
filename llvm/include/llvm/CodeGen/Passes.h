@@ -219,6 +219,7 @@ namespace llvm {
   /// Quadratic Prograaming (PBQP) based register allocator.
   ///
   FunctionPass *createDefaultPBQPRegisterAllocator();
+  FunctionPass *createDefaultPBQPRegisterAllocator(RegClassFilterFunc F);
 
   /// PrologEpilogCodeInserter - This pass inserts prolog and epilog code,
   /// and eliminates abstract frame references.
