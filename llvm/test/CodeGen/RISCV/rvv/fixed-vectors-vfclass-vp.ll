@@ -11,7 +11,8 @@ define <2 x i1> @isnan_v2f16(<2 x half> %x, <2 x i1> %m, i32 zeroext %evl) {
 ; CHECK-NEXT:    vfclass.v v8, v8, v0.t
 ; CHECK-NEXT:    li a0, 768
 ; CHECK-NEXT:    vand.vx v8, v8, a0, v0.t
-; CHECK-NEXT:    vmsne.vi v0, v8, 0, v0.t
+; CHECK-NEXT:    vmsne.vi v8, v8, 0, v0.t
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <2 x i1> @llvm.vp.is.fpclass.v2f16(<2 x half> %x, i32 3, <2 x i1> %m, i32 %evl)  ; nan
   ret <2 x i1> %1
@@ -39,7 +40,8 @@ define <2 x i1> @isnan_v2f32(<2 x float> %x, <2 x i1> %m, i32 zeroext %evl) {
 ; CHECK-NEXT:    vfclass.v v8, v8, v0.t
 ; CHECK-NEXT:    li a0, 927
 ; CHECK-NEXT:    vand.vx v8, v8, a0, v0.t
-; CHECK-NEXT:    vmsne.vi v0, v8, 0, v0.t
+; CHECK-NEXT:    vmsne.vi v8, v8, 0, v0.t
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <2 x i1> @llvm.vp.is.fpclass.v2f32(<2 x float> %x, i32 639, <2 x i1> %m, i32 %evl)
   ret <2 x i1> %1
@@ -67,7 +69,8 @@ define <4 x i1> @isnan_v4f32(<4 x float> %x, <4 x i1> %m, i32 zeroext %evl) {
 ; CHECK-NEXT:    vfclass.v v8, v8, v0.t
 ; CHECK-NEXT:    li a0, 768
 ; CHECK-NEXT:    vand.vx v8, v8, a0, v0.t
-; CHECK-NEXT:    vmsne.vi v0, v8, 0, v0.t
+; CHECK-NEXT:    vmsne.vi v8, v8, 0, v0.t
+; CHECK-NEXT:    vmv.v.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <4 x i1> @llvm.vp.is.fpclass.v4f32(<4 x float> %x, i32 3, <4 x i1> %m, i32 %evl)  ; nan
   ret <4 x i1> %1
@@ -105,9 +108,10 @@ define <8 x i1> @isnan_v8f32_unmasked(<8 x float> %x, i32 zeroext %evl) {
 ; CHECK-LABEL: isnan_v8f32_unmasked:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli zero, a0, e32, m2, ta, ma
-; CHECK-NEXT:    vfclass.v v8, v8
+; CHECK-NEXT:    vfclass.v v10, v8
 ; CHECK-NEXT:    li a0, 512
-; CHECK-NEXT:    vmseq.vx v0, v8, a0
+; CHECK-NEXT:    vmseq.vx v8, v10, a0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <8 x i1> poison, i1 true, i32 0
   %m = shufflevector <8 x i1> %head, <8 x i1> poison, <8 x i32> zeroinitializer
@@ -132,9 +136,10 @@ define <16 x i1> @isnan_v16f32_unmasked(<16 x float> %x, i32 zeroext %evl) {
 ; CHECK-LABEL: isnan_v16f32_unmasked:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli zero, a0, e32, m4, ta, ma
-; CHECK-NEXT:    vfclass.v v8, v8
+; CHECK-NEXT:    vfclass.v v12, v8
 ; CHECK-NEXT:    li a0, 256
-; CHECK-NEXT:    vmseq.vx v0, v8, a0
+; CHECK-NEXT:    vmseq.vx v8, v12, a0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
     %head = insertelement <16 x i1> poison, i1 true, i32 0
   %m = shufflevector <16 x i1> %head, <16 x i1> poison, <16 x i32> zeroinitializer
@@ -149,7 +154,8 @@ define <2 x i1> @isnormal_v2f64(<2 x double> %x, <2 x i1> %m, i32 zeroext %evl) 
 ; CHECK-NEXT:    vfclass.v v8, v8, v0.t
 ; CHECK-NEXT:    li a0, 129
 ; CHECK-NEXT:    vand.vx v8, v8, a0, v0.t
-; CHECK-NEXT:    vmsne.vi v0, v8, 0, v0.t
+; CHECK-NEXT:    vmsne.vi v8, v8, 0, v0.t
+; CHECK-NEXT:    vmv.v.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <2 x i1> @llvm.vp.is.fpclass.v2f64(<2 x double> %x, i32 516, <2 x i1> %m, i32 %evl) ; 0x204 = "inf"
   ret <2 x i1> %1
@@ -187,9 +193,10 @@ define <4 x i1> @isposinf_v4f64_unmasked(<4 x double> %x, i32 zeroext %evl) {
 ; CHECK-LABEL: isposinf_v4f64_unmasked:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli zero, a0, e64, m2, ta, ma
-; CHECK-NEXT:    vfclass.v v8, v8
+; CHECK-NEXT:    vfclass.v v10, v8
 ; CHECK-NEXT:    li a0, 128
-; CHECK-NEXT:    vmseq.vx v0, v8, a0
+; CHECK-NEXT:    vmseq.vx v8, v10, a0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <4 x i1> poison, i1 true, i32 0
   %m = shufflevector <4 x i1> %head, <4 x i1> poison, <4 x i32> zeroinitializer
@@ -213,8 +220,9 @@ define <8 x i1> @isneginf_v8f64_unmasked(<8 x double> %x, i32 zeroext %evl) {
 ; CHECK-LABEL: isneginf_v8f64_unmasked:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli zero, a0, e64, m4, ta, ma
-; CHECK-NEXT:    vfclass.v v8, v8
-; CHECK-NEXT:    vmseq.vi v0, v8, 1
+; CHECK-NEXT:    vfclass.v v12, v8
+; CHECK-NEXT:    vmseq.vi v8, v12, 1
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <8 x i1> poison, i1 true, i32 0
   %m = shufflevector <8 x i1> %head, <8 x i1> poison, <8 x i32> zeroinitializer
@@ -242,8 +250,9 @@ define <16 x i1> @isfinite_v16f64_unmasked(<16 x double> %x, i32 zeroext %evl) {
 ; CHECK-NEXT:    vsetvli zero, a0, e64, m8, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
 ; CHECK-NEXT:    li a0, 126
-; CHECK-NEXT:    vand.vx v8, v8, a0
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vx v16, v8, a0
+; CHECK-NEXT:    vmsne.vi v8, v16, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <16 x i1> poison, i1 true, i32 0
   %m = shufflevector <16 x i1> %head, <16 x i1> poison, <16 x i32> zeroinitializer
@@ -270,8 +279,9 @@ define <16 x i1> @isnegfinite_v16f64_unmasked(<16 x double> %x, i32 zeroext %evl
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli zero, a0, e64, m8, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
-; CHECK-NEXT:    vand.vi v8, v8, 14
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vi v16, v8, 14
+; CHECK-NEXT:    vmsne.vi v8, v16, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <16 x i1> poison, i1 true, i32 0
   %m = shufflevector <16 x i1> %head, <16 x i1> poison, <16 x i32> zeroinitializer
@@ -299,8 +309,9 @@ define <16 x i1> @isnotfinite_v16f64_unmasked(<16 x double> %x, i32 zeroext %evl
 ; CHECK-NEXT:    vsetvli zero, a0, e64, m8, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
 ; CHECK-NEXT:    li a0, 897
-; CHECK-NEXT:    vand.vx v8, v8, a0
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vx v16, v8, a0
+; CHECK-NEXT:    vmsne.vi v8, v16, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <16 x i1> poison, i1 true, i32 0
   %m = shufflevector <16 x i1> %head, <16 x i1> poison, <16 x i32> zeroinitializer

@@ -6,14 +6,14 @@ define <4 x i32> @add_constant_rhs(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: add_constant_rhs:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vmv.v.x v9, a0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI0_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI0_0)
-; CHECK-NEXT:    vle32.v v9, (a0)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a1
-; CHECK-NEXT:    vslide1down.vx v8, v8, a2
-; CHECK-NEXT:    vslide1down.vx v8, v8, a3
-; CHECK-NEXT:    vadd.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vslide1down.vx v9, v9, a1
+; CHECK-NEXT:    vslide1down.vx v9, v9, a2
+; CHECK-NEXT:    vslide1down.vx v9, v9, a3
+; CHECK-NEXT:    vadd.vv v8, v9, v8
 ; CHECK-NEXT:    ret
   %e0 = add i32 %a, 23
   %e1 = add i32 %b, 25
@@ -34,14 +34,14 @@ define <8 x i32> @add_constant_rhs_8xi32(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e,
 ; CHECK-NEXT:    vslide1down.vx v8, v8, a1
 ; CHECK-NEXT:    vslide1down.vx v8, v8, a2
 ; CHECK-NEXT:    vslide1down.vx v8, v8, a3
-; CHECK-NEXT:    vslide1down.vx v8, v8, a4
+; CHECK-NEXT:    vslide1down.vx v10, v8, a4
 ; CHECK-NEXT:    lui a0, %hi(.LCPI1_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI1_0)
-; CHECK-NEXT:    vle32.v v10, (a0)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a5
-; CHECK-NEXT:    vslide1down.vx v8, v8, a6
-; CHECK-NEXT:    vslide1down.vx v8, v8, a7
-; CHECK-NEXT:    vadd.vv v8, v8, v10
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vslide1down.vx v10, v10, a5
+; CHECK-NEXT:    vslide1down.vx v10, v10, a6
+; CHECK-NEXT:    vslide1down.vx v10, v10, a7
+; CHECK-NEXT:    vadd.vv v8, v10, v8
 ; CHECK-NEXT:    ret
   %e0 = add i32 %a, 23
   %e1 = add i32 %b, 25
@@ -67,14 +67,14 @@ define <4 x i32> @sub_constant_rhs(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: sub_constant_rhs:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vmv.v.x v9, a0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI2_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI2_0)
-; CHECK-NEXT:    vle32.v v9, (a0)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a1
-; CHECK-NEXT:    vslide1down.vx v8, v8, a2
-; CHECK-NEXT:    vslide1down.vx v8, v8, a3
-; CHECK-NEXT:    vsub.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vslide1down.vx v9, v9, a1
+; CHECK-NEXT:    vslide1down.vx v9, v9, a2
+; CHECK-NEXT:    vslide1down.vx v9, v9, a3
+; CHECK-NEXT:    vsub.vv v8, v9, v8
 ; CHECK-NEXT:    ret
   %e0 = sub i32 %a, 23
   %e1 = sub i32 %b, 25
@@ -91,14 +91,14 @@ define <4 x i32> @mul_constant_rhs(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: mul_constant_rhs:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vmv.v.x v9, a0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI3_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI3_0)
-; CHECK-NEXT:    vle32.v v9, (a0)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a1
-; CHECK-NEXT:    vslide1down.vx v8, v8, a2
-; CHECK-NEXT:    vslide1down.vx v8, v8, a3
-; CHECK-NEXT:    vmul.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vslide1down.vx v9, v9, a1
+; CHECK-NEXT:    vslide1down.vx v9, v9, a2
+; CHECK-NEXT:    vslide1down.vx v9, v9, a3
+; CHECK-NEXT:    vmul.vv v8, v9, v8
 ; CHECK-NEXT:    ret
   %e0 = mul i32 %a, 23
   %e1 = mul i32 %b, 25
@@ -115,26 +115,27 @@ define <4 x i32> @udiv_constant_rhs(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: udiv_constant_rhs:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vmv.v.x v9, a0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI4_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI4_0)
-; CHECK-NEXT:    vle32.v v9, (a0)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a1
-; CHECK-NEXT:    vslide1down.vx v8, v8, a2
-; CHECK-NEXT:    vslide1down.vx v8, v8, a3
-; CHECK-NEXT:    vmulhu.vv v9, v8, v9
-; CHECK-NEXT:    vsub.vv v10, v8, v9
-; CHECK-NEXT:    vmv.v.i v11, 0
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vslide1down.vx v9, v9, a1
+; CHECK-NEXT:    vslide1down.vx v9, v9, a2
+; CHECK-NEXT:    vslide1down.vx v12, v9, a3
+; CHECK-NEXT:    vmulhu.vv v11, v12, v8
+; CHECK-NEXT:    vsub.vv v10, v12, v11
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    lui a0, 524288
-; CHECK-NEXT:    vslide1down.vx v11, v11, a0
+; CHECK-NEXT:    vslide1down.vx v9, v8, a0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI4_1)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI4_1)
-; CHECK-NEXT:    vle32.v v12, (a0)
-; CHECK-NEXT:    vmulhu.vv v10, v10, v11
-; CHECK-NEXT:    vadd.vv v9, v10, v9
-; CHECK-NEXT:    vmv.v.i v0, 4
-; CHECK-NEXT:    vsrl.vv v9, v9, v12
-; CHECK-NEXT:    vmerge.vvm v8, v9, v8, v0
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vmulhu.vv v9, v10, v9
+; CHECK-NEXT:    vadd.vv v10, v9, v11
+; CHECK-NEXT:    vmv.v.i v9, 4
+; CHECK-NEXT:    vsrl.vv v8, v10, v8
+; CHECK-NEXT:    vmv.v.v v0, v9
+; CHECK-NEXT:    vmerge.vvm v8, v8, v12, v0
 ; CHECK-NEXT:    ret
   %e0 = udiv i32 %a, 23
   %e1 = udiv i32 %b, 25
@@ -152,14 +153,14 @@ define <4 x float> @fadd_constant_rhs(float %a, float %b, float %c, float %d) {
 ; CHECK-LABEL: fadd_constant_rhs:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vfmv.v.f v8, fa0
+; CHECK-NEXT:    vfmv.v.f v9, fa0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI5_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI5_0)
-; CHECK-NEXT:    vle32.v v9, (a0)
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa1
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa2
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa3
-; CHECK-NEXT:    vfadd.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vfslide1down.vf v9, v9, fa1
+; CHECK-NEXT:    vfslide1down.vf v9, v9, fa2
+; CHECK-NEXT:    vfslide1down.vf v9, v9, fa3
+; CHECK-NEXT:    vfadd.vv v8, v9, v8
 ; CHECK-NEXT:    ret
   %e0 = fadd float %a, 23.0
   %e1 = fadd float %b, 25.0
@@ -176,14 +177,14 @@ define <4 x float> @fdiv_constant_rhs(float %a, float %b, float %c, float %d) {
 ; CHECK-LABEL: fdiv_constant_rhs:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vfmv.v.f v8, fa0
+; CHECK-NEXT:    vfmv.v.f v9, fa0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI6_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI6_0)
-; CHECK-NEXT:    vle32.v v9, (a0)
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa1
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa2
-; CHECK-NEXT:    vfslide1down.vf v8, v8, fa3
-; CHECK-NEXT:    vfdiv.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vfslide1down.vf v9, v9, fa1
+; CHECK-NEXT:    vfslide1down.vf v9, v9, fa2
+; CHECK-NEXT:    vfslide1down.vf v9, v9, fa3
+; CHECK-NEXT:    vfdiv.vv v8, v9, v8
 ; CHECK-NEXT:    ret
   %e0 = fdiv float %a, 23.0
   %e1 = fdiv float %b, 25.0
@@ -314,14 +315,14 @@ define <4 x i32> @add_constant_rhs_inverse(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: add_constant_rhs_inverse:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vmv.v.x v9, a0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI11_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI11_0)
-; CHECK-NEXT:    vle32.v v9, (a0)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a1
-; CHECK-NEXT:    vslide1down.vx v8, v8, a2
-; CHECK-NEXT:    vslide1down.vx v8, v8, a3
-; CHECK-NEXT:    vadd.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vslide1down.vx v9, v9, a1
+; CHECK-NEXT:    vslide1down.vx v9, v9, a2
+; CHECK-NEXT:    vslide1down.vx v9, v9, a3
+; CHECK-NEXT:    vadd.vv v8, v9, v8
 ; CHECK-NEXT:    ret
   %e0 = sub i32 %a, 1
   %e1 = add i32 %b, 25
@@ -338,14 +339,14 @@ define <4 x i32> @add_constant_rhs_commute(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: add_constant_rhs_commute:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vmv.v.x v9, a0
 ; CHECK-NEXT:    lui a0, %hi(.LCPI12_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI12_0)
-; CHECK-NEXT:    vle32.v v9, (a0)
-; CHECK-NEXT:    vslide1down.vx v8, v8, a1
-; CHECK-NEXT:    vslide1down.vx v8, v8, a2
-; CHECK-NEXT:    vslide1down.vx v8, v8, a3
-; CHECK-NEXT:    vadd.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vslide1down.vx v9, v9, a1
+; CHECK-NEXT:    vslide1down.vx v9, v9, a2
+; CHECK-NEXT:    vslide1down.vx v9, v9, a3
+; CHECK-NEXT:    vadd.vv v8, v9, v8
 ; CHECK-NEXT:    ret
   %e0 = add i32 %a, 23
   %e1 = add i32 %b, 25
@@ -441,9 +442,9 @@ define void @buggy(i32 %0) #0 {
 ; RV32-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
 ; RV32-NEXT:    vmv.v.x v8, a0
 ; RV32-NEXT:    vadd.vv v8, v8, v8
-; RV32-NEXT:    vor.vi v8, v8, 1
-; RV32-NEXT:    vrgather.vi v9, v8, 0
-; RV32-NEXT:    vse32.v v9, (zero)
+; RV32-NEXT:    vor.vi v9, v8, 1
+; RV32-NEXT:    vrgather.vi v8, v9, 0
+; RV32-NEXT:    vse32.v v8, (zero)
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: buggy:
@@ -451,9 +452,9 @@ define void @buggy(i32 %0) #0 {
 ; RV64-NEXT:    slli a0, a0, 1
 ; RV64-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
 ; RV64-NEXT:    vmv.v.x v8, a0
-; RV64-NEXT:    vor.vi v8, v8, 1
-; RV64-NEXT:    vrgather.vi v9, v8, 0
-; RV64-NEXT:    vse32.v v9, (zero)
+; RV64-NEXT:    vor.vi v9, v8, 1
+; RV64-NEXT:    vrgather.vi v8, v9, 0
+; RV64-NEXT:    vse32.v v8, (zero)
 ; RV64-NEXT:    ret
 entry:
   %mul.us.us.i.3 = shl i32 %0, 1
@@ -498,23 +499,25 @@ define <8 x i32> @add_constant_rhs_8xi32_vector_in(<8 x i32> %vin, i32 %a, i32 %
 define <8 x i32> @add_constant_rhs_8xi32_vector_in2(<8 x i32> %vin, i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: add_constant_rhs_8xi32_vector_in2:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv2r.v v10, v8
 ; CHECK-NEXT:    addi a0, a0, 23
 ; CHECK-NEXT:    addi a1, a1, 25
 ; CHECK-NEXT:    addi a2, a2, 1
 ; CHECK-NEXT:    addi a3, a3, 2047
 ; CHECK-NEXT:    addi a3, a3, 308
 ; CHECK-NEXT:    vsetivli zero, 5, e32, m2, tu, ma
-; CHECK-NEXT:    vmv.s.x v10, a0
-; CHECK-NEXT:    vslideup.vi v8, v10, 4
-; CHECK-NEXT:    vmv.s.x v10, a1
+; CHECK-NEXT:    vmv.s.x v8, a0
+; CHECK-NEXT:    vslideup.vi v10, v8, 4
+; CHECK-NEXT:    vmv.s.x v8, a1
 ; CHECK-NEXT:    vsetivli zero, 6, e32, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 5
-; CHECK-NEXT:    vmv.s.x v10, a2
+; CHECK-NEXT:    vslideup.vi v10, v8, 5
+; CHECK-NEXT:    vmv.s.x v8, a2
 ; CHECK-NEXT:    vsetivli zero, 7, e32, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 6
-; CHECK-NEXT:    vmv.s.x v10, a3
+; CHECK-NEXT:    vslideup.vi v10, v8, 6
+; CHECK-NEXT:    vmv.s.x v8, a3
 ; CHECK-NEXT:    vsetivli zero, 8, e32, m2, ta, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 7
+; CHECK-NEXT:    vslideup.vi v10, v8, 7
+; CHECK-NEXT:    vmv.v.v v8, v10
 ; CHECK-NEXT:    ret
   %e0 = add i32 %a, 23
   %e1 = add i32 %b, 25
@@ -530,21 +533,23 @@ define <8 x i32> @add_constant_rhs_8xi32_vector_in2(<8 x i32> %vin, i32 %a, i32 
 define <8 x i32> @add_constant_rhs_8xi32_vector_in3(<8 x i32> %vin, i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: add_constant_rhs_8xi32_vector_in3:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv2r.v v10, v8
 ; CHECK-NEXT:    addi a0, a0, 23
 ; CHECK-NEXT:    addi a1, a1, 25
 ; CHECK-NEXT:    addi a2, a2, 1
 ; CHECK-NEXT:    addi a3, a3, 2047
 ; CHECK-NEXT:    addi a3, a3, 308
 ; CHECK-NEXT:    vsetivli zero, 3, e32, m1, tu, ma
-; CHECK-NEXT:    vmv.s.x v8, a0
-; CHECK-NEXT:    vmv.s.x v10, a1
-; CHECK-NEXT:    vslideup.vi v8, v10, 2
-; CHECK-NEXT:    vmv.s.x v10, a2
+; CHECK-NEXT:    vmv.s.x v10, a0
+; CHECK-NEXT:    vmv.s.x v8, a1
+; CHECK-NEXT:    vslideup.vi v10, v8, 2
+; CHECK-NEXT:    vmv.s.x v8, a2
 ; CHECK-NEXT:    vsetivli zero, 5, e32, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 4
-; CHECK-NEXT:    vmv.s.x v10, a3
+; CHECK-NEXT:    vslideup.vi v10, v8, 4
+; CHECK-NEXT:    vmv.s.x v8, a3
 ; CHECK-NEXT:    vsetivli zero, 7, e32, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 6
+; CHECK-NEXT:    vslideup.vi v10, v8, 6
+; CHECK-NEXT:    vmv2r.v v8, v10
 ; CHECK-NEXT:    ret
   %e0 = add i32 %a, 23
   %e1 = add i32 %b, 25
@@ -560,22 +565,23 @@ define <8 x i32> @add_constant_rhs_8xi32_vector_in3(<8 x i32> %vin, i32 %a, i32 
 define <8 x i32> @add_constant_rhs_8xi32_partial(<8 x i32> %vin, i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: add_constant_rhs_8xi32_partial:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv2r.v v12, v8
 ; CHECK-NEXT:    vsetivli zero, 5, e32, m2, tu, ma
-; CHECK-NEXT:    vmv.s.x v10, a0
-; CHECK-NEXT:    vslideup.vi v8, v10, 4
-; CHECK-NEXT:    vmv.s.x v10, a1
+; CHECK-NEXT:    vmv.s.x v8, a0
+; CHECK-NEXT:    vslideup.vi v12, v8, 4
+; CHECK-NEXT:    vmv.s.x v8, a1
 ; CHECK-NEXT:    vsetivli zero, 6, e32, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 5
-; CHECK-NEXT:    vmv.s.x v10, a2
+; CHECK-NEXT:    vslideup.vi v12, v8, 5
+; CHECK-NEXT:    vmv.s.x v8, a2
 ; CHECK-NEXT:    vsetivli zero, 7, e32, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 6
+; CHECK-NEXT:    vslideup.vi v12, v8, 6
 ; CHECK-NEXT:    vmv.s.x v10, a3
 ; CHECK-NEXT:    vsetivli zero, 8, e32, m2, ta, ma
 ; CHECK-NEXT:    lui a0, %hi(.LCPI19_0)
 ; CHECK-NEXT:    addi a0, a0, %lo(.LCPI19_0)
-; CHECK-NEXT:    vle32.v v12, (a0)
-; CHECK-NEXT:    vslideup.vi v8, v10, 7
-; CHECK-NEXT:    vadd.vv v8, v8, v12
+; CHECK-NEXT:    vle32.v v8, (a0)
+; CHECK-NEXT:    vslideup.vi v12, v10, 7
+; CHECK-NEXT:    vadd.vv v8, v12, v8
 ; CHECK-NEXT:    ret
   %vadd = add <8 x i32> %vin, <i32 1, i32 2, i32 3, i32 5, i32 undef, i32 undef, i32 undef, i32 undef>
   %e0 = add i32 %a, 23

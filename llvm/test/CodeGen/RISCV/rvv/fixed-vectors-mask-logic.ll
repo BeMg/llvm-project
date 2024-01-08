@@ -8,9 +8,9 @@ define void @and_v8i1(ptr %x, ptr %y) {
 ; CHECK-LABEL: and_v8i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmand.mm v8, v8, v9
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmand.mm v8, v9, v8
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <8 x i1>, ptr %x
@@ -24,9 +24,9 @@ define void @or_v16i1(ptr %x, ptr %y) {
 ; CHECK-LABEL: or_v16i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 16, e8, m1, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmor.mm v8, v8, v9
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmor.mm v8, v9, v8
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <16 x i1>, ptr %x
@@ -41,9 +41,9 @@ define void @xor_v32i1(ptr %x, ptr %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a2, 32
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m2, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmxor.mm v8, v8, v9
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmxor.mm v8, v9, v8
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <32 x i1>, ptr %x
@@ -73,9 +73,9 @@ define void @andnot_v8i1(ptr %x, ptr %y) {
 ; CHECK-LABEL: andnot_v8i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmandn.mm v8, v9, v8
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmandn.mm v8, v8, v9
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <8 x i1>, ptr %x
@@ -90,9 +90,9 @@ define void @ornot_v16i1(ptr %x, ptr %y) {
 ; CHECK-LABEL: ornot_v16i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 16, e8, m1, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmorn.mm v8, v9, v8
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmorn.mm v8, v8, v9
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <16 x i1>, ptr %x
@@ -108,9 +108,9 @@ define void @xornot_v32i1(ptr %x, ptr %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a2, 32
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m2, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmxnor.mm v8, v8, v9
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmxnor.mm v8, v9, v8
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <32 x i1>, ptr %x
@@ -125,9 +125,9 @@ define void @nand_v8i1(ptr %x, ptr %y) {
 ; CHECK-LABEL: nand_v8i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmnand.mm v8, v8, v9
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmnand.mm v8, v9, v8
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <8 x i1>, ptr %x
@@ -142,9 +142,9 @@ define void @nor_v16i1(ptr %x, ptr %y) {
 ; CHECK-LABEL: nor_v16i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 16, e8, m1, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmnor.mm v8, v8, v9
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmnor.mm v8, v9, v8
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <16 x i1>, ptr %x
@@ -160,9 +160,9 @@ define void @xnor_v32i1(ptr %x, ptr %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a2, 32
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m2, ta, ma
-; CHECK-NEXT:    vlm.v v8, (a0)
-; CHECK-NEXT:    vlm.v v9, (a1)
-; CHECK-NEXT:    vmxnor.mm v8, v8, v9
+; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a1)
+; CHECK-NEXT:    vmxnor.mm v8, v9, v8
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <32 x i1>, ptr %x

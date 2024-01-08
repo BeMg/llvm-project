@@ -10,9 +10,9 @@ define void @add_v4i32(ptr %x, ptr %y) {
 ; CHECK-LABEL: add_v4i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vle32.v v8, (a0)
-; CHECK-NEXT:    vle32.v v9, (a1)
-; CHECK-NEXT:    vadd.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v9, (a0)
+; CHECK-NEXT:    vle32.v v8, (a1)
+; CHECK-NEXT:    vadd.vv v8, v9, v8
 ; CHECK-NEXT:    vse32.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <4 x i32>, ptr %x
@@ -71,9 +71,9 @@ define void @add_v2i32(ptr %x, ptr %y) {
 ; CHECK-LABEL: add_v2i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 2, e32, m1, ta, ma
-; CHECK-NEXT:    vle32.v v8, (a0)
-; CHECK-NEXT:    vle32.v v9, (a1)
-; CHECK-NEXT:    vadd.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v9, (a0)
+; CHECK-NEXT:    vle32.v v8, (a1)
+; CHECK-NEXT:    vadd.vv v8, v9, v8
 ; CHECK-NEXT:    vse32.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <2 x i32>, ptr %x
@@ -118,9 +118,9 @@ define void @fadd_v4f32(ptr %x, ptr %y) {
 ; CHECK-LABEL: fadd_v4f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vle32.v v8, (a0)
-; CHECK-NEXT:    vle32.v v9, (a1)
-; CHECK-NEXT:    vfadd.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v9, (a0)
+; CHECK-NEXT:    vle32.v v8, (a1)
+; CHECK-NEXT:    vfadd.vv v8, v9, v8
 ; CHECK-NEXT:    vse32.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <4 x float>, ptr %x
@@ -155,9 +155,9 @@ define void @fadd_v2f32(ptr %x, ptr %y) {
 ; CHECK-LABEL: fadd_v2f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 2, e32, m1, ta, ma
-; CHECK-NEXT:    vle32.v v8, (a0)
-; CHECK-NEXT:    vle32.v v9, (a1)
-; CHECK-NEXT:    vfadd.vv v8, v8, v9
+; CHECK-NEXT:    vle32.v v9, (a0)
+; CHECK-NEXT:    vle32.v v8, (a1)
+; CHECK-NEXT:    vfadd.vv v8, v9, v8
 ; CHECK-NEXT:    vse32.v v8, (a0)
 ; CHECK-NEXT:    ret
   %a = load <2 x float>, ptr %x

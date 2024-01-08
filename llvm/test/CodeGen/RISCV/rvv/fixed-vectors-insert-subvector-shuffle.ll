@@ -55,10 +55,11 @@ define <4 x i32> @insert_subvector_load_foldable_passthru_v4i32_v4i32(<4 x i32> 
 define <4 x i32> @insert_subvector_add_v4i32_v4i32(<4 x i32> %v1, <4 x i32> %v2) {
 ; CHECK-LABEL: insert_subvector_add_v4i32_v4i32:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v10, v9
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vid.v v10
+; CHECK-NEXT:    vid.v v9
 ; CHECK-NEXT:    vsetivli zero, 2, e32, m1, tu, ma
-; CHECK-NEXT:    vadd.vv v8, v9, v10
+; CHECK-NEXT:    vadd.vv v8, v10, v9
 ; CHECK-NEXT:    ret
   %v3 = add <4 x i32> %v2, <i32 0, i32 1, i32 2, i32 3>
   %v4 = shufflevector <4 x i32> %v3, <4 x i32> %v1, <4 x i32> <i32 0, i32 1, i32 6, i32 7>
@@ -109,9 +110,10 @@ define <4 x i32> @insert_subvector_vp_load_v4i32_v2i32(<4 x i32> %v1, ptr %p, <2
 define <4 x i32> @insert_subvector_add_v4i32_v2i32(<4 x i32> %v1, <2 x i32> %v2) {
 ; CHECK-LABEL: insert_subvector_add_v4i32_v2i32:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v10, v9
 ; CHECK-NEXT:    vsetivli zero, 2, e32, mf2, ta, ma
-; CHECK-NEXT:    vid.v v10
-; CHECK-NEXT:    vadd.vv v9, v9, v10
+; CHECK-NEXT:    vid.v v9
+; CHECK-NEXT:    vadd.vv v9, v10, v9
 ; CHECK-NEXT:    vsetivli zero, 2, e32, m1, tu, ma
 ; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    ret

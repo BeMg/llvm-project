@@ -7,11 +7,12 @@ declare <vscale x 2 x half> @llvm.vp.uitofp.nxv2f16.nxv2i1(<vscale x 2 x i1>, <v
 define <vscale x 2 x half> @vuitofp_nxv2f16_nxv2i1(<vscale x 2 x i1> %va, <vscale x 2 x i1> %m, i32 zeroext %evl) {
 ; CHECK-LABEL: vuitofp_nxv2f16_nxv2i1:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v9, v8
 ; CHECK-NEXT:    vsetvli zero, a0, e16, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
-; CHECK-NEXT:    vmerge.vim v9, v9, 1, v0
-; CHECK-NEXT:    vmv1r.v v0, v8
-; CHECK-NEXT:    vfcvt.f.xu.v v8, v9, v0.t
+; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmv1r.v v0, v9
+; CHECK-NEXT:    vfcvt.f.xu.v v8, v8, v0.t
 ; CHECK-NEXT:    ret
   %v = call <vscale x 2 x half> @llvm.vp.uitofp.nxv2f16.nxv2i1(<vscale x 2 x i1> %va, <vscale x 2 x i1> %m, i32 %evl)
   ret <vscale x 2 x half> %v
@@ -34,11 +35,12 @@ declare <vscale x 2 x float> @llvm.vp.uitofp.nxv2f32.nxv2i1(<vscale x 2 x i1>, <
 define <vscale x 2 x float> @vuitofp_nxv2f32_nxv2i1(<vscale x 2 x i1> %va, <vscale x 2 x i1> %m, i32 zeroext %evl) {
 ; CHECK-LABEL: vuitofp_nxv2f32_nxv2i1:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v9, v8
 ; CHECK-NEXT:    vsetvli zero, a0, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
-; CHECK-NEXT:    vmerge.vim v9, v9, 1, v0
-; CHECK-NEXT:    vmv1r.v v0, v8
-; CHECK-NEXT:    vfcvt.f.xu.v v8, v9, v0.t
+; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmv1r.v v0, v9
+; CHECK-NEXT:    vfcvt.f.xu.v v8, v8, v0.t
 ; CHECK-NEXT:    ret
   %v = call <vscale x 2 x float> @llvm.vp.uitofp.nxv2f32.nxv2i1(<vscale x 2 x i1> %va, <vscale x 2 x i1> %m, i32 %evl)
   ret <vscale x 2 x float> %v
@@ -61,11 +63,12 @@ declare <vscale x 2 x double> @llvm.vp.uitofp.nxv2f64.nxv2i1(<vscale x 2 x i1>, 
 define <vscale x 2 x double> @vuitofp_nxv2f64_nxv2i1(<vscale x 2 x i1> %va, <vscale x 2 x i1> %m, i32 zeroext %evl) {
 ; CHECK-LABEL: vuitofp_nxv2f64_nxv2i1:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v10, v8
 ; CHECK-NEXT:    vsetvli zero, a0, e64, m2, ta, ma
-; CHECK-NEXT:    vmv.v.i v10, 0
-; CHECK-NEXT:    vmerge.vim v10, v10, 1, v0
-; CHECK-NEXT:    vmv1r.v v0, v8
-; CHECK-NEXT:    vfcvt.f.xu.v v8, v10, v0.t
+; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmv1r.v v0, v10
+; CHECK-NEXT:    vfcvt.f.xu.v v8, v8, v0.t
 ; CHECK-NEXT:    ret
   %v = call <vscale x 2 x double> @llvm.vp.uitofp.nxv2f64.nxv2i1(<vscale x 2 x i1> %va, <vscale x 2 x i1> %m, i32 %evl)
   ret <vscale x 2 x double> %v

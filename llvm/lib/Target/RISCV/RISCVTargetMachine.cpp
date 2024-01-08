@@ -412,6 +412,8 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 FunctionPass *RISCVPassConfig::createRVVRegAllocPass(bool Optimized) {
+  return createPBQPRVVRegisterAllocator();
+
   // Initialize the global default.
   llvm::call_once(InitializeDefaultRVVRegisterAllocatorFlag,
                   initializeDefaultRVVRegisterAllocatorOnce);

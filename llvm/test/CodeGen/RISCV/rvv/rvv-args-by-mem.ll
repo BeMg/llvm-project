@@ -37,6 +37,7 @@ define <vscale x 16 x i32> @foo(i32 %0, i32 %1, i32 %2, i32 %3, i32 %4, i32 %5, 
 ; CHECK-NEXT:    sub sp, sp, t0
 ; CHECK-NEXT:    andi sp, sp, -64
 ; CHECK-NEXT:    mv s1, sp
+; CHECK-NEXT:    vmv8r.v v16, v8
 ; CHECK-NEXT:    addi sp, sp, -16
 ; CHECK-NEXT:    addi t0, s1, 64
 ; CHECK-NEXT:    vs8r.v v8, (t0)
@@ -47,7 +48,6 @@ define <vscale x 16 x i32> @foo(i32 %0, i32 %1, i32 %2, i32 %3, i32 %4, i32 %5, 
 ; CHECK-NEXT:    vs8r.v v8, (t1)
 ; CHECK-NEXT:    sd t0, 8(sp)
 ; CHECK-NEXT:    sd t1, 0(sp)
-; CHECK-NEXT:    vmv8r.v v16, v8
 ; CHECK-NEXT:    call bar@plt
 ; CHECK-NEXT:    addi sp, sp, 16
 ; CHECK-NEXT:    addi sp, s0, -96

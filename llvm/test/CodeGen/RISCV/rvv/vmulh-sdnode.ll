@@ -7,14 +7,15 @@
 define <vscale x 4 x i1> @srem_eq_fold_nxv4i8(<vscale x 4 x i8> %va) {
 ; CHECK-LABEL: srem_eq_fold_nxv4i8:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v9, v8
 ; CHECK-NEXT:    li a0, 42
 ; CHECK-NEXT:    vsetvli a1, zero, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.x v9, a0
+; CHECK-NEXT:    vmv.v.x v8, a0
 ; CHECK-NEXT:    li a1, -85
-; CHECK-NEXT:    vmacc.vx v9, a1, v8
-; CHECK-NEXT:    vsll.vi v8, v9, 7
-; CHECK-NEXT:    vsrl.vi v9, v9, 1
-; CHECK-NEXT:    vor.vv v8, v9, v8
+; CHECK-NEXT:    vmacc.vx v8, a1, v9
+; CHECK-NEXT:    vsll.vi v9, v8, 7
+; CHECK-NEXT:    vsrl.vi v8, v8, 1
+; CHECK-NEXT:    vor.vv v8, v8, v9
 ; CHECK-NEXT:    vmsleu.vx v0, v8, a0
 ; CHECK-NEXT:    ret
   %head_six = insertelement <vscale x 4 x i8> poison, i8 6, i32 0

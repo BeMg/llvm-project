@@ -11,15 +11,15 @@ define void @sink_splat_vp_and_i1(ptr nocapture %a, i1 zeroext %x, <8 x i1> %m, 
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
 ; CHECK-NEXT:    vmv.v.x v8, a1
-; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmsne.vi v9, v8, 0
 ; CHECK-NEXT:    addi a1, a0, 1024
 ; CHECK-NEXT:  .LBB0_1: # %vector.body
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    vlm.v v9, (a0)
+; CHECK-NEXT:    vlm.v v8, (a0)
 ; CHECK-NEXT:    vsetvli zero, a2, e8, mf2, ta, ma
-; CHECK-NEXT:    vmand.mm v9, v9, v8
+; CHECK-NEXT:    vmand.mm v8, v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vsm.v v9, (a0)
+; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    addi a0, a0, 1
 ; CHECK-NEXT:    bne a0, a1, .LBB0_1
 ; CHECK-NEXT:  # %bb.2: # %for.cond.cleanup

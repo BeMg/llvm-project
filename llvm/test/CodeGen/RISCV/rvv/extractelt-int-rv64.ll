@@ -792,9 +792,9 @@ define i32 @extractelt_sdiv_nxv4i32_splat(<vscale x 4 x i32> %x) {
 ; RV64NOM-NEXT:    lui a0, 349525
 ; RV64NOM-NEXT:    addi a0, a0, 1366
 ; RV64NOM-NEXT:    vsetvli a1, zero, e32, m2, ta, ma
-; RV64NOM-NEXT:    vmulh.vx v8, v8, a0
-; RV64NOM-NEXT:    vsrl.vi v10, v8, 31
-; RV64NOM-NEXT:    vadd.vv v8, v8, v10
+; RV64NOM-NEXT:    vmulh.vx v10, v8, a0
+; RV64NOM-NEXT:    vsrl.vi v8, v10, 31
+; RV64NOM-NEXT:    vadd.vv v8, v10, v8
 ; RV64NOM-NEXT:    vmv.x.s a0, v8
 ; RV64NOM-NEXT:    ret
 ;
@@ -822,9 +822,9 @@ define i32 @extractelt_udiv_nxv4i32_splat(<vscale x 4 x i32> %x) {
 ; RV64NOM-NEXT:    lui a0, 349525
 ; RV64NOM-NEXT:    addi a0, a0, 1366
 ; RV64NOM-NEXT:    vsetvli a1, zero, e32, m2, ta, ma
-; RV64NOM-NEXT:    vmulh.vx v8, v8, a0
-; RV64NOM-NEXT:    vsrl.vi v10, v8, 31
-; RV64NOM-NEXT:    vadd.vv v8, v8, v10
+; RV64NOM-NEXT:    vmulh.vx v10, v8, a0
+; RV64NOM-NEXT:    vsrl.vi v8, v10, 31
+; RV64NOM-NEXT:    vadd.vv v8, v10, v8
 ; RV64NOM-NEXT:    vmv.x.s a0, v8
 ; RV64NOM-NEXT:    ret
 ;

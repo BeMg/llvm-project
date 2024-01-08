@@ -796,12 +796,14 @@ define <vscale x 1 x i64> @vremu_vi_nxv1i64_1(<vscale x 1 x i64> %va) {
 define <vscale x 1 x i64> @vremu_vi_nxv1i64_2(<vscale x 1 x i64> %va, <vscale x 1 x i64> %vb) {
 ; CHECK-LABEL: vremu_vi_nxv1i64_2:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v10, v9
+; CHECK-NEXT:    vmv1r.v v9, v8
 ; CHECK-NEXT:    li a0, 16
 ; CHECK-NEXT:    vsetvli a1, zero, e64, m1, ta, ma
-; CHECK-NEXT:    vmv.v.x v10, a0
-; CHECK-NEXT:    vsll.vv v9, v10, v9
-; CHECK-NEXT:    vadd.vi v9, v9, -1
-; CHECK-NEXT:    vand.vv v8, v8, v9
+; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vsll.vv v8, v8, v10
+; CHECK-NEXT:    vadd.vi v8, v8, -1
+; CHECK-NEXT:    vand.vv v8, v9, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 1 x i64> poison, i64 16, i32 0
   %splat = shufflevector <vscale x 1 x i64> %head, <vscale x 1 x i64> poison, <vscale x 1 x i32> zeroinitializer
@@ -907,12 +909,14 @@ define <vscale x 2 x i64> @vremu_vi_nxv2i64_1(<vscale x 2 x i64> %va) {
 define <vscale x 2 x i64> @vremu_vi_nxv2i64_2(<vscale x 2 x i64> %va, <vscale x 2 x i64> %vb) {
 ; CHECK-LABEL: vremu_vi_nxv2i64_2:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv2r.v v12, v10
+; CHECK-NEXT:    vmv2r.v v10, v8
 ; CHECK-NEXT:    li a0, 16
 ; CHECK-NEXT:    vsetvli a1, zero, e64, m2, ta, ma
-; CHECK-NEXT:    vmv.v.x v12, a0
-; CHECK-NEXT:    vsll.vv v10, v12, v10
-; CHECK-NEXT:    vadd.vi v10, v10, -1
-; CHECK-NEXT:    vand.vv v8, v8, v10
+; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vsll.vv v8, v8, v12
+; CHECK-NEXT:    vadd.vi v8, v8, -1
+; CHECK-NEXT:    vand.vv v8, v10, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 2 x i64> poison, i64 16, i32 0
   %splat = shufflevector <vscale x 2 x i64> %head, <vscale x 2 x i64> poison, <vscale x 2 x i32> zeroinitializer
@@ -1018,12 +1022,14 @@ define <vscale x 4 x i64> @vremu_vi_nxv4i64_1(<vscale x 4 x i64> %va) {
 define <vscale x 4 x i64> @vremu_vi_nxv4i64_2(<vscale x 4 x i64> %va, <vscale x 4 x i64> %vb) {
 ; CHECK-LABEL: vremu_vi_nxv4i64_2:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv4r.v v16, v12
+; CHECK-NEXT:    vmv4r.v v12, v8
 ; CHECK-NEXT:    li a0, 16
 ; CHECK-NEXT:    vsetvli a1, zero, e64, m4, ta, ma
-; CHECK-NEXT:    vmv.v.x v16, a0
-; CHECK-NEXT:    vsll.vv v12, v16, v12
-; CHECK-NEXT:    vadd.vi v12, v12, -1
-; CHECK-NEXT:    vand.vv v8, v8, v12
+; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vsll.vv v8, v8, v16
+; CHECK-NEXT:    vadd.vi v8, v8, -1
+; CHECK-NEXT:    vand.vv v8, v12, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 4 x i64> poison, i64 16, i32 0
   %splat = shufflevector <vscale x 4 x i64> %head, <vscale x 4 x i64> poison, <vscale x 4 x i32> zeroinitializer
@@ -1129,12 +1135,14 @@ define <vscale x 8 x i64> @vremu_vi_nxv8i64_1(<vscale x 8 x i64> %va) {
 define <vscale x 8 x i64> @vremu_vi_nxv8i64_2(<vscale x 8 x i64> %va, <vscale x 8 x i64> %vb) {
 ; CHECK-LABEL: vremu_vi_nxv8i64_2:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv8r.v v24, v16
+; CHECK-NEXT:    vmv8r.v v16, v8
 ; CHECK-NEXT:    li a0, 16
 ; CHECK-NEXT:    vsetvli a1, zero, e64, m8, ta, ma
-; CHECK-NEXT:    vmv.v.x v24, a0
-; CHECK-NEXT:    vsll.vv v16, v24, v16
-; CHECK-NEXT:    vadd.vi v16, v16, -1
-; CHECK-NEXT:    vand.vv v8, v8, v16
+; CHECK-NEXT:    vmv.v.x v8, a0
+; CHECK-NEXT:    vsll.vv v8, v8, v24
+; CHECK-NEXT:    vadd.vi v8, v8, -1
+; CHECK-NEXT:    vand.vv v8, v16, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 8 x i64> poison, i64 16, i32 0
   %splat = shufflevector <vscale x 8 x i64> %head, <vscale x 8 x i64> poison, <vscale x 8 x i32> zeroinitializer

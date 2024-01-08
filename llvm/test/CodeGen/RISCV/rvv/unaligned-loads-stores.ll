@@ -146,13 +146,15 @@ define <vscale x 1 x i1> @unaligned_load_nxv1i1_a1(<vscale x 1 x i1>* %ptr) {
 ; CHECK-LABEL: unaligned_load_nxv1i1_a1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli a1, zero, e8, mf8, ta, ma
-; CHECK-NEXT:    vlm.v v0, (a0)
+; CHECK-NEXT:    vlm.v v8, (a0)
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
 ;
 ; FAST-LABEL: unaligned_load_nxv1i1_a1:
 ; FAST:       # %bb.0:
 ; FAST-NEXT:    vsetvli a1, zero, e8, mf8, ta, ma
-; FAST-NEXT:    vlm.v v0, (a0)
+; FAST-NEXT:    vlm.v v8, (a0)
+; FAST-NEXT:    vmv1r.v v0, v8
 ; FAST-NEXT:    ret
   %v = load <vscale x 1 x i1>, <vscale x 1 x i1>* %ptr, align 1
   ret <vscale x 1 x i1> %v

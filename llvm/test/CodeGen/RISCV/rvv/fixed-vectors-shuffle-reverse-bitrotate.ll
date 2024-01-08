@@ -7,14 +7,16 @@
 define <256 x i1> @reverse_v256i1(<256 x i1> %a) {
 ; CHECK-LABEL: reverse_v256i1:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v10, v0
 ; CHECK-NEXT:    li a0, 256
 ; CHECK-NEXT:    vsetvli zero, a0, e8, m2, ta, ma
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
-; CHECK-NEXT:    vid.v v10
-; CHECK-NEXT:    vrsub.vi v10, v10, -1
-; CHECK-NEXT:    vrgather.vv v12, v8, v10
-; CHECK-NEXT:    vmsne.vi v0, v12, 0
+; CHECK-NEXT:    vmerge.vim v12, v8, 1, v0
+; CHECK-NEXT:    vid.v v8
+; CHECK-NEXT:    vrsub.vi v8, v8, -1
+; CHECK-NEXT:    vrgather.vv v10, v12, v8
+; CHECK-NEXT:    vmsne.vi v8, v10, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %res = call <256 x i1> @llvm.experimental.vector.reverse.v256i1(<256 x i1> %a)
   ret <256 x i1> %res

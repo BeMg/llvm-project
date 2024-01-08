@@ -411,16 +411,17 @@ define void @extract_v2i1_v64i1_0(ptr %x, ptr %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a2, 64
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m4, ta, ma
-; CHECK-NEXT:    vlm.v v0, (a0)
+; CHECK-NEXT:    vlm.v v9, (a0)
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmv1r.v v0, v9
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a1)
 ; CHECK-NEXT:    ret
   %a = load <64 x i1>, ptr %x
@@ -434,21 +435,22 @@ define void @extract_v2i1_v64i1_2(ptr %x, ptr %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a2, 64
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m4, ta, ma
-; CHECK-NEXT:    vlm.v v0, (a0)
+; CHECK-NEXT:    vlm.v v12, (a0)
 ; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmv1r.v v0, v12
 ; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, m1, ta, ma
 ; CHECK-NEXT:    vslidedown.vi v8, v8, 2
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a1)
 ; CHECK-NEXT:    ret
   %a = load <64 x i1>, ptr %x
@@ -462,8 +464,9 @@ define void @extract_v2i1_v64i1_42(ptr %x, ptr %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a2, 64
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m4, ta, ma
-; CHECK-NEXT:    vlm.v v0, (a0)
+; CHECK-NEXT:    vlm.v v12, (a0)
 ; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmv1r.v v0, v12
 ; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
 ; CHECK-NEXT:    li a0, 42
 ; CHECK-NEXT:    vsetivli zero, 2, e8, m4, ta, ma
@@ -471,13 +474,13 @@ define void @extract_v2i1_v64i1_42(ptr %x, ptr %y) {
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a1)
 ; CHECK-NEXT:    ret
   %a = load <64 x i1>, ptr %x
@@ -491,13 +494,13 @@ define void @extract_v2i1_nxv2i1_0(<vscale x 2 x i1> %x, ptr %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %c = call <2 x i1> @llvm.vector.extract.v2i1.nxv2i1(<vscale x 2 x i1> %x, i64 0)
@@ -516,13 +519,13 @@ define void @extract_v2i1_nxv2i1_2(<vscale x 2 x i1> %x, ptr %y) {
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %c = call <2 x i1> @llvm.vector.extract.v2i1.nxv2i1(<vscale x 2 x i1> %x, i64 2)
@@ -535,13 +538,13 @@ define void @extract_v2i1_nxv64i1_0(<vscale x 64 x i1> %x, ptr %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %c = call <2 x i1> @llvm.vector.extract.v2i1.nxv64i1(<vscale x 64 x i1> %x, i64 0)
@@ -560,13 +563,13 @@ define void @extract_v2i1_nxv64i1_2(<vscale x 64 x i1> %x, ptr %y) {
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %c = call <2 x i1> @llvm.vector.extract.v2i1.nxv64i1(<vscale x 64 x i1> %x, i64 2)
@@ -586,13 +589,13 @@ define void @extract_v2i1_nxv64i1_42(<vscale x 64 x i1> %x, ptr %y) {
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %c = call <2 x i1> @llvm.vector.extract.v2i1.nxv64i1(<vscale x 64 x i1> %x, i64 42)
@@ -611,13 +614,13 @@ define void @extract_v2i1_nxv32i1_26(<vscale x 32 x i1> %x, ptr %y) {
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf2, tu, ma
-; CHECK-NEXT:    vmv.v.v v9, v8
+; CHECK-NEXT:    vmv.v.v v8, v9
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vmsne.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
 ; CHECK-NEXT:    vsm.v v8, (a0)
 ; CHECK-NEXT:    ret
   %c = call <2 x i1> @llvm.vector.extract.v2i1.nxv32i1(<vscale x 32 x i1> %x, i64 26)

@@ -89,12 +89,12 @@ define void @mixed_splats1(ptr %p, i32 %v) {
 ; CHECK-LABEL: mixed_splats1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli a2, zero, e32, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a1
+; CHECK-NEXT:    vmv.v.x v9, a1
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
-; CHECK-NEXT:    vse32.v v9, (a0)
-; CHECK-NEXT:    vsetvli a1, zero, e32, mf2, ta, ma
+; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vse32.v v8, (a0)
+; CHECK-NEXT:    vsetvli a1, zero, e32, mf2, ta, ma
+; CHECK-NEXT:    vse32.v v9, (a0)
 ; CHECK-NEXT:    ret
   %elt.head = insertelement <vscale x 1 x i32> poison, i32 %v, i32 0
   %splat = shufflevector <vscale x 1 x i32> %elt.head, <vscale x 1 x i32> poison, <vscale x 1 x i32> zeroinitializer

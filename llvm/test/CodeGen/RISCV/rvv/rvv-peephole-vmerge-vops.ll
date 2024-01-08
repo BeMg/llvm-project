@@ -284,10 +284,11 @@ declare <vscale x 2 x i32> @llvm.riscv.viota.nxv2i32(<vscale x 2 x i32>, <vscale
 define <vscale x 2 x i32> @vpmerge_viota(<vscale x 2 x i32> %passthru, <vscale x 2 x i1> %m, <vscale x 2 x i1> %vm, i32 zeroext %vl) {
 ; CHECK-LABEL: vpmerge_viota:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v10, v9
 ; CHECK-NEXT:    vsetvli zero, a0, e32, m1, ta, ma
-; CHECK-NEXT:    viota.m v10, v9
+; CHECK-NEXT:    viota.m v9, v10
 ; CHECK-NEXT:    vsetvli zero, zero, e32, m1, tu, ma
-; CHECK-NEXT:    vmerge.vvm v8, v8, v10, v0
+; CHECK-NEXT:    vmerge.vvm v8, v8, v9, v0
 ; CHECK-NEXT:    ret
   %1 = zext i32 %vl to i64
   %a = call <vscale x 2 x i32> @llvm.riscv.viota.nxv2i32(<vscale x 2 x i32> undef, <vscale x 2 x i1> %vm, i64 %1)
@@ -747,9 +748,10 @@ define <vscale x 2 x i32> @vpselect_vid(<vscale x 2 x i32> %passthru, <vscale x 
 define <vscale x 2 x i32> @vpselect_viota(<vscale x 2 x i32> %passthru, <vscale x 2 x i1> %m, <vscale x 2 x i1> %vm, i32 zeroext %vl) {
 ; CHECK-LABEL: vpselect_viota:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v11, v8
 ; CHECK-NEXT:    vsetvli zero, a0, e32, m1, ta, ma
-; CHECK-NEXT:    viota.m v10, v9
-; CHECK-NEXT:    vmerge.vvm v8, v8, v10, v0
+; CHECK-NEXT:    viota.m v8, v9
+; CHECK-NEXT:    vmerge.vvm v8, v11, v8, v0
 ; CHECK-NEXT:    ret
   %1 = zext i32 %vl to i64
   %a = call <vscale x 2 x i32> @llvm.riscv.viota.nxv2i32(<vscale x 2 x i32> undef, <vscale x 2 x i1> %vm, i64 %1)
@@ -953,21 +955,22 @@ define void @test_dag_loop() {
 ; CHECK-LABEL: test_dag_loop:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    vsetivli zero, 1, e16, m8, ta, ma
-; CHECK-NEXT:    vle16.v v8, (zero)
+; CHECK-NEXT:    vle16.v v16, (zero)
 ; CHECK-NEXT:    vsetvli a0, zero, e8, m4, ta, ma
 ; CHECK-NEXT:    vmclr.m v0
-; CHECK-NEXT:    vmv.v.i v16, 0
+; CHECK-NEXT:    vmv.v.i v24, 0
 ; CHECK-NEXT:    vsetivli zero, 0, e8, m4, tu, mu
-; CHECK-NEXT:    vmv4r.v v20, v16
-; CHECK-NEXT:    vssubu.vx v20, v16, zero, v0.t
+; CHECK-NEXT:    vmv4r.v v12, v24
+; CHECK-NEXT:    vssubu.vx v12, v24, zero, v0.t
 ; CHECK-NEXT:    vsetvli zero, zero, e8, m4, ta, ma
-; CHECK-NEXT:    vmseq.vv v0, v20, v16
+; CHECK-NEXT:    vmseq.vv v8, v12, v24
 ; CHECK-NEXT:    vsetvli a0, zero, e16, m8, ta, ma
-; CHECK-NEXT:    vmv.v.i v16, 0
+; CHECK-NEXT:    vmv.v.i v24, 0
 ; CHECK-NEXT:    vsetivli zero, 1, e16, m8, tu, ma
-; CHECK-NEXT:    vmerge.vvm v16, v16, v8, v0
+; CHECK-NEXT:    vmv1r.v v0, v8
+; CHECK-NEXT:    vmerge.vvm v24, v24, v16, v0
 ; CHECK-NEXT:    vsetivli zero, 0, e16, m8, ta, ma
-; CHECK-NEXT:    vse16.v v16, (zero)
+; CHECK-NEXT:    vse16.v v24, (zero)
 ; CHECK-NEXT:    ret
 entry:
   %0 = call <vscale x 32 x i16> @llvm.riscv.vle.nxv32i16.i64(<vscale x 32 x i16> undef, <vscale x 32 x i16>* null, i64 1)
@@ -1004,11 +1007,12 @@ declare <vscale x 2 x i32> @llvm.riscv.vredsum.nxv2i32.nxv2i32(
 define <vscale x 2 x i32> @vredsum(<vscale x 2 x i32> %passthru, <vscale x 2 x i32> %x, <vscale x 2 x i32> %y, <vscale x 2 x i1> %m, i64 %vl) {
 ; CHECK-LABEL: vredsum:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v12, v9
 ; CHECK-NEXT:    vsetvli zero, a0, e32, m1, ta, ma
-; CHECK-NEXT:    vmv1r.v v11, v8
-; CHECK-NEXT:    vredsum.vs v11, v9, v10
+; CHECK-NEXT:    vmv1r.v v9, v8
+; CHECK-NEXT:    vredsum.vs v9, v12, v10
 ; CHECK-NEXT:    vsetvli zero, zero, e32, m1, tu, ma
-; CHECK-NEXT:    vmerge.vvm v8, v8, v11, v0
+; CHECK-NEXT:    vmerge.vvm v8, v8, v9, v0
 ; CHECK-NEXT:    ret
   %a = call <vscale x 2 x i32> @llvm.riscv.vredsum.nxv2i32.nxv2i32(
     <vscale x 2 x i32> %passthru,
@@ -1028,12 +1032,13 @@ declare <vscale x 2 x float> @llvm.riscv.vfredusum.nxv2f32.nxv2f32(
 define <vscale x 2 x float> @vfredusum(<vscale x 2 x float> %passthru, <vscale x 2 x float> %x, <vscale x 2 x float> %y, <vscale x 2 x i1> %m, i64 %vl) {
 ; CHECK-LABEL: vfredusum:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v12, v9
 ; CHECK-NEXT:    vsetvli zero, a0, e32, m1, ta, ma
 ; CHECK-NEXT:    fsrmi a0, 0
-; CHECK-NEXT:    vmv1r.v v11, v8
-; CHECK-NEXT:    vfredusum.vs v11, v9, v10
+; CHECK-NEXT:    vmv1r.v v9, v8
+; CHECK-NEXT:    vfredusum.vs v9, v12, v10
 ; CHECK-NEXT:    vsetvli zero, zero, e32, m1, tu, ma
-; CHECK-NEXT:    vmerge.vvm v8, v8, v11, v0
+; CHECK-NEXT:    vmerge.vvm v8, v8, v9, v0
 ; CHECK-NEXT:    fsrm a0
 ; CHECK-NEXT:    ret
   %a = call <vscale x 2 x float> @llvm.riscv.vfredusum.nxv2f32.nxv2f32(

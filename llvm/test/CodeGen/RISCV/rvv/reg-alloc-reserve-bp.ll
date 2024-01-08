@@ -41,10 +41,10 @@ define void @foo(ptr nocapture noundef %p1) {
 ; CHECK-NEXT:    call bar@plt
 ; CHECK-NEXT:    addi sp, sp, 16
 ; CHECK-NEXT:    vsetivli zero, 8, e32, m2, ta, ma
-; CHECK-NEXT:    vle32.v v8, (s2)
+; CHECK-NEXT:    vle32.v v10, (s2)
 ; CHECK-NEXT:    addi a0, s1, 160
-; CHECK-NEXT:    vl2r.v v10, (a0) # Unknown-size Folded Reload
-; CHECK-NEXT:    vfadd.vv v8, v10, v8
+; CHECK-NEXT:    vl2r.v v8, (a0) # Unknown-size Folded Reload
+; CHECK-NEXT:    vfadd.vv v8, v8, v10
 ; CHECK-NEXT:    vse32.v v8, (s2)
 ; CHECK-NEXT:    addi sp, s0, -192
 ; CHECK-NEXT:    ld ra, 184(sp) # 8-byte Folded Reload

@@ -37,8 +37,9 @@ define <vscale x 4 x i1> @isnan_nxv4f32(<vscale x 4 x float> %x) {
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m2, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
 ; CHECK-NEXT:    li a0, 768
-; CHECK-NEXT:    vand.vx v8, v8, a0
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vx v10, v8, a0
+; CHECK-NEXT:    vmsne.vi v8, v10, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 4 x i1> @llvm.is.fpclass.nxv4f32(<vscale x 4 x float> %x, i32 3)  ; nan
   ret <vscale x 4 x i1> %1
@@ -48,9 +49,10 @@ define <vscale x 8 x i1> @isnan_nxv8f32(<vscale x 8 x float> %x) {
 ; CHECK-LABEL: isnan_nxv8f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m4, ta, ma
-; CHECK-NEXT:    vfclass.v v8, v8
+; CHECK-NEXT:    vfclass.v v12, v8
 ; CHECK-NEXT:    li a0, 512
-; CHECK-NEXT:    vmseq.vx v0, v8, a0
+; CHECK-NEXT:    vmseq.vx v8, v12, a0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 8 x i1> @llvm.is.fpclass.nxv8f32(<vscale x 8 x float> %x, i32 2)
   ret <vscale x 8 x i1> %1
@@ -60,9 +62,10 @@ define <vscale x 16 x i1> @isnan_nxv16f32(<vscale x 16 x float> %x) {
 ; CHECK-LABEL: isnan_nxv16f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m8, ta, ma
-; CHECK-NEXT:    vfclass.v v8, v8
+; CHECK-NEXT:    vfclass.v v16, v8
 ; CHECK-NEXT:    li a0, 256
-; CHECK-NEXT:    vmseq.vx v0, v8, a0
+; CHECK-NEXT:    vmseq.vx v8, v16, a0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 16 x i1> @llvm.is.fpclass.nxv16f32(<vscale x 16 x float> %x, i32 1)
   ret <vscale x 16 x i1> %1
@@ -74,8 +77,9 @@ define <vscale x 2 x i1> @isnormal_nxv2f64(<vscale x 2 x double> %x) {
 ; CHECK-NEXT:    vsetvli a0, zero, e64, m2, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
 ; CHECK-NEXT:    li a0, 129
-; CHECK-NEXT:    vand.vx v8, v8, a0
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vx v10, v8, a0
+; CHECK-NEXT:    vmsne.vi v8, v10, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 2 x i1> @llvm.is.fpclass.nxv2f64(<vscale x 2 x double> %x, i32 516) ; 0x204 = "inf"
   ret <vscale x 2 x i1> %1
@@ -85,9 +89,10 @@ define <vscale x 4 x i1> @isposinf_nxv4f64(<vscale x 4 x double> %x) {
 ; CHECK-LABEL: isposinf_nxv4f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli a0, zero, e64, m4, ta, ma
-; CHECK-NEXT:    vfclass.v v8, v8
+; CHECK-NEXT:    vfclass.v v12, v8
 ; CHECK-NEXT:    li a0, 128
-; CHECK-NEXT:    vmseq.vx v0, v8, a0
+; CHECK-NEXT:    vmseq.vx v8, v12, a0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 4 x i1> @llvm.is.fpclass.nxv4f64(<vscale x 4 x double> %x, i32 512) ; 0x200 = "+inf"
   ret <vscale x 4 x i1> %1
@@ -97,8 +102,9 @@ define <vscale x 8 x i1> @isneginf_nxv8f64(<vscale x 8 x double> %x) {
 ; CHECK-LABEL: isneginf_nxv8f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli a0, zero, e64, m8, ta, ma
-; CHECK-NEXT:    vfclass.v v8, v8
-; CHECK-NEXT:    vmseq.vi v0, v8, 1
+; CHECK-NEXT:    vfclass.v v16, v8
+; CHECK-NEXT:    vmseq.vi v8, v16, 1
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 8 x i1> @llvm.is.fpclass.nxv8f64(<vscale x 8 x double> %x, i32 4) ; "-inf"
   ret <vscale x 8 x i1> %1
@@ -110,8 +116,9 @@ define <vscale x 16 x i1> @isfinite_nxv16f32(<vscale x 16 x float> %x) {
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m8, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
 ; CHECK-NEXT:    li a0, 126
-; CHECK-NEXT:    vand.vx v8, v8, a0
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vx v16, v8, a0
+; CHECK-NEXT:    vmsne.vi v8, v16, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 16 x i1> @llvm.is.fpclass.nxv16f32(<vscale x 16 x float> %x, i32 504) ; 0x1f8 = "finite"
   ret <vscale x 16 x i1> %1
@@ -123,8 +130,9 @@ define <vscale x 16 x i1> @isposfinite_nxv16f32(<vscale x 16 x float> %x) {
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m8, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
 ; CHECK-NEXT:    li a0, 112
-; CHECK-NEXT:    vand.vx v8, v8, a0
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vx v16, v8, a0
+; CHECK-NEXT:    vmsne.vi v8, v16, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 16 x i1> @llvm.is.fpclass.nxv16f32(<vscale x 16 x float> %x, i32 448) ; 0x1c0 = "+finite"
   ret <vscale x 16 x i1> %1
@@ -135,8 +143,9 @@ define <vscale x 16 x i1> @isnegfinite_nxv16f32(<vscale x 16 x float> %x) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m8, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
-; CHECK-NEXT:    vand.vi v8, v8, 14
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vi v16, v8, 14
+; CHECK-NEXT:    vmsne.vi v8, v16, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 16 x i1> @llvm.is.fpclass.nxv16f32(<vscale x 16 x float> %x, i32 56) ; 0x38 = "-finite"
   ret <vscale x 16 x i1> %1
@@ -148,8 +157,9 @@ define <vscale x 16 x i1> @isnotfinite_nxv16f32(<vscale x 16 x float> %x) {
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m8, ta, ma
 ; CHECK-NEXT:    vfclass.v v8, v8
 ; CHECK-NEXT:    li a0, 897
-; CHECK-NEXT:    vand.vx v8, v8, a0
-; CHECK-NEXT:    vmsne.vi v0, v8, 0
+; CHECK-NEXT:    vand.vx v16, v8, a0
+; CHECK-NEXT:    vmsne.vi v8, v16, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %1 = call <vscale x 16 x i1> @llvm.is.fpclass.nxv16f32(<vscale x 16 x float> %x, i32 519) ; 0x207 = "inf|nan"
   ret <vscale x 16 x i1> %1

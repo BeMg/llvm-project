@@ -44,7 +44,7 @@ define <vscale x 64 x i8> @caller() {
 ; RV64IV-NEXT:    mul a0, a0, a1
 ; RV64IV-NEXT:    add a0, sp, a0
 ; RV64IV-NEXT:    addi a0, a0, 64
-; RV64IV-NEXT:    vl8r.v v8, (a0)
+; RV64IV-NEXT:    vl8r.v v24, (a0)
 ; RV64IV-NEXT:    csrr a0, vlenb
 ; RV64IV-NEXT:    slli a0, a0, 4
 ; RV64IV-NEXT:    add a0, sp, a0
@@ -54,10 +54,11 @@ define <vscale x 64 x i8> @caller() {
 ; RV64IV-NEXT:    slli a0, a0, 3
 ; RV64IV-NEXT:    add a0, sp, a0
 ; RV64IV-NEXT:    addi a0, a0, 64
-; RV64IV-NEXT:    vl8r.v v24, (a0)
+; RV64IV-NEXT:    vl8r.v v8, (a0)
 ; RV64IV-NEXT:    addi a1, sp, 64
 ; RV64IV-NEXT:    addi a0, sp, 64
-; RV64IV-NEXT:    vs8r.v v24, (a1)
+; RV64IV-NEXT:    vs8r.v v8, (a1)
+; RV64IV-NEXT:    vmv8r.v v8, v24
 ; RV64IV-NEXT:    call callee@plt
 ; RV64IV-NEXT:    addi sp, s0, -80
 ; RV64IV-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload

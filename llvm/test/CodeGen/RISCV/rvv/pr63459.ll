@@ -6,11 +6,11 @@ define void @snork(ptr %arg, <vscale x 2 x i64> %arg1) {
 ; CHECK:       # %bb.0: # %bb
 ; CHECK-NEXT:    csrr a1, vlenb
 ; CHECK-NEXT:    vsetvli a2, zero, e64, m2, ta, ma
-; CHECK-NEXT:    vmul.vx v8, v8, a1
+; CHECK-NEXT:    vmul.vx v10, v8, a1
 ; CHECK-NEXT:    vsetvli zero, zero, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.i v10, 1
+; CHECK-NEXT:    vmv.v.i v8, 1
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vsoxei64.v v10, (a0), v8
+; CHECK-NEXT:    vsoxei64.v v8, (a0), v10
 ; CHECK-NEXT:    ret
 bb:
   %getelementptr = getelementptr inbounds <vscale x 2 x i32>, ptr %arg, <vscale x 2 x i64> %arg1

@@ -9,11 +9,13 @@ declare <8 x i7> @llvm.vp.shl.v8i7(<8 x i7>, <8 x i7>, <8 x i1>, i32)
 define <8 x i7> @vsll_vv_v8i7(<8 x i7> %va, <8 x i7> %b, <8 x i1> %m, i32 zeroext %evl) {
 ; CHECK-LABEL: vsll_vv_v8i7:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v11, v9
+; CHECK-NEXT:    vmv1r.v v9, v8
 ; CHECK-NEXT:    li a1, 127
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NEXT:    vand.vx v9, v9, a1
+; CHECK-NEXT:    vand.vx v8, v11, a1
 ; CHECK-NEXT:    vsetvli zero, a0, e8, mf2, ta, ma
-; CHECK-NEXT:    vsll.vv v8, v8, v9, v0.t
+; CHECK-NEXT:    vsll.vv v8, v9, v8, v0.t
 ; CHECK-NEXT:    ret
   %v = call <8 x i7> @llvm.vp.shl.v8i7(<8 x i7> %va, <8 x i7> %b, <8 x i1> %m, i32 %evl)
   ret <8 x i7> %v

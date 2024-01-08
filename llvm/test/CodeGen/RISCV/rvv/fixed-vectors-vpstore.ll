@@ -286,12 +286,14 @@ define void @vpstore_v32f64(<32 x double> %val, ptr %ptr, <32 x i1> %m, i32 zero
 ; CHECK-LABEL: vpstore_v32f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a3, 16
+; CHECK-NEXT:    vmv1r.v v24, v0
 ; CHECK-NEXT:    mv a2, a1
 ; CHECK-NEXT:    bltu a1, a3, .LBB23_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    li a2, 16
 ; CHECK-NEXT:  .LBB23_2:
 ; CHECK-NEXT:    vsetvli zero, a2, e64, m8, ta, ma
+; CHECK-NEXT:    vmv1r.v v0, v24
 ; CHECK-NEXT:    vse64.v v8, (a0), v0.t
 ; CHECK-NEXT:    addi a2, a1, -16
 ; CHECK-NEXT:    sltu a1, a1, a2
@@ -299,8 +301,9 @@ define void @vpstore_v32f64(<32 x double> %val, ptr %ptr, <32 x i1> %m, i32 zero
 ; CHECK-NEXT:    and a1, a1, a2
 ; CHECK-NEXT:    addi a0, a0, 128
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf4, ta, ma
-; CHECK-NEXT:    vslidedown.vi v0, v0, 2
+; CHECK-NEXT:    vslidedown.vi v8, v24, 2
 ; CHECK-NEXT:    vsetvli zero, a1, e64, m8, ta, ma
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    vse64.v v16, (a0), v0.t
 ; CHECK-NEXT:    ret
   call void @llvm.vp.store.v32f64.p0(<32 x double> %val, ptr %ptr, <32 x i1> %m, i32 %evl)

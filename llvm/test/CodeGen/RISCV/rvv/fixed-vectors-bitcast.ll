@@ -128,11 +128,12 @@ define i32 @bitcast_v1i32_i32(<1 x i32> %a) {
 define i64 @bitcast_v8i8_i64(<8 x i8> %a) {
 ; RV32-LABEL: bitcast_v8i8_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    vmv1r.v v9, v8
 ; RV32-NEXT:    li a0, 32
 ; RV32-NEXT:    vsetivli zero, 1, e64, m1, ta, ma
-; RV32-NEXT:    vsrl.vx v9, v8, a0
-; RV32-NEXT:    vmv.x.s a1, v9
-; RV32-NEXT:    vmv.x.s a0, v8
+; RV32-NEXT:    vsrl.vx v8, v8, a0
+; RV32-NEXT:    vmv.x.s a1, v8
+; RV32-NEXT:    vmv.x.s a0, v9
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bitcast_v8i8_i64:
@@ -166,11 +167,12 @@ define i64 @bitcast_v8i8_i64(<8 x i8> %a) {
 define i64 @bitcast_v4i16_i64(<4 x i16> %a) {
 ; RV32-LABEL: bitcast_v4i16_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    vmv1r.v v9, v8
 ; RV32-NEXT:    li a0, 32
 ; RV32-NEXT:    vsetivli zero, 1, e64, m1, ta, ma
-; RV32-NEXT:    vsrl.vx v9, v8, a0
-; RV32-NEXT:    vmv.x.s a1, v9
-; RV32-NEXT:    vmv.x.s a0, v8
+; RV32-NEXT:    vsrl.vx v8, v8, a0
+; RV32-NEXT:    vmv.x.s a1, v8
+; RV32-NEXT:    vmv.x.s a0, v9
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bitcast_v4i16_i64:
@@ -204,11 +206,12 @@ define i64 @bitcast_v4i16_i64(<4 x i16> %a) {
 define i64 @bitcast_v2i32_i64(<2 x i32> %a) {
 ; RV32-LABEL: bitcast_v2i32_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    vmv1r.v v9, v8
 ; RV32-NEXT:    li a0, 32
 ; RV32-NEXT:    vsetivli zero, 1, e64, m1, ta, ma
-; RV32-NEXT:    vsrl.vx v9, v8, a0
-; RV32-NEXT:    vmv.x.s a1, v9
-; RV32-NEXT:    vmv.x.s a0, v8
+; RV32-NEXT:    vsrl.vx v8, v8, a0
+; RV32-NEXT:    vmv.x.s a1, v8
+; RV32-NEXT:    vmv.x.s a0, v9
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bitcast_v2i32_i64:
@@ -242,11 +245,12 @@ define i64 @bitcast_v2i32_i64(<2 x i32> %a) {
 define i64 @bitcast_v1i64_i64(<1 x i64> %a) {
 ; RV32-LABEL: bitcast_v1i64_i64:
 ; RV32:       # %bb.0:
+; RV32-NEXT:    vmv1r.v v9, v8
 ; RV32-NEXT:    li a0, 32
 ; RV32-NEXT:    vsetivli zero, 1, e64, m1, ta, ma
-; RV32-NEXT:    vsrl.vx v9, v8, a0
-; RV32-NEXT:    vmv.x.s a1, v9
-; RV32-NEXT:    vmv.x.s a0, v8
+; RV32-NEXT:    vsrl.vx v8, v8, a0
+; RV32-NEXT:    vmv.x.s a1, v8
+; RV32-NEXT:    vmv.x.s a0, v9
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: bitcast_v1i64_i64:

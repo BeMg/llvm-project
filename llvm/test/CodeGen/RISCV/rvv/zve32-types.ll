@@ -16,10 +16,10 @@ define void @vadd_vv_nxv1i8(<vscale x 1 x i8>* %pa, <vscale x 1 x i8>* %pb) {
 ; CHECK-NEXT:    csrr a2, vlenb
 ; CHECK-NEXT:    srli a2, a2, 3
 ; CHECK-NEXT:    vsetvli zero, a2, e8, mf4, ta, ma
-; CHECK-NEXT:    vle8.v v8, (a0)
-; CHECK-NEXT:    vle8.v v9, (a1)
+; CHECK-NEXT:    vle8.v v9, (a0)
+; CHECK-NEXT:    vle8.v v8, (a1)
 ; CHECK-NEXT:    vsetvli a1, zero, e8, mf4, ta, ma
-; CHECK-NEXT:    vadd.vv v8, v8, v9
+; CHECK-NEXT:    vadd.vv v8, v9, v8
 ; CHECK-NEXT:    vsetvli zero, a2, e8, mf4, ta, ma
 ; CHECK-NEXT:    vse8.v v8, (a0)
 ; CHECK-NEXT:    ret
@@ -36,10 +36,10 @@ define void @vadd_vv_nxv1i16(<vscale x 1 x i16>* %pa, <vscale x 1 x i16>* %pb) {
 ; CHECK-NEXT:    csrr a2, vlenb
 ; CHECK-NEXT:    srli a2, a2, 3
 ; CHECK-NEXT:    vsetvli zero, a2, e16, mf2, ta, ma
-; CHECK-NEXT:    vle16.v v8, (a0)
-; CHECK-NEXT:    vle16.v v9, (a1)
+; CHECK-NEXT:    vle16.v v9, (a0)
+; CHECK-NEXT:    vle16.v v8, (a1)
 ; CHECK-NEXT:    vsetvli a1, zero, e16, mf2, ta, ma
-; CHECK-NEXT:    vadd.vv v8, v8, v9
+; CHECK-NEXT:    vadd.vv v8, v9, v8
 ; CHECK-NEXT:    vsetvli zero, a2, e16, mf2, ta, ma
 ; CHECK-NEXT:    vse16.v v8, (a0)
 ; CHECK-NEXT:    ret
@@ -56,10 +56,10 @@ define void @vadd_vv_nxv1i32(<vscale x 1 x i32>* %pa, <vscale x 1 x i32>* %pb) {
 ; CHECK-NEXT:    csrr a2, vlenb
 ; CHECK-NEXT:    srli a2, a2, 3
 ; CHECK-NEXT:    vsetvli zero, a2, e32, m1, ta, ma
-; CHECK-NEXT:    vle32.v v8, (a0)
-; CHECK-NEXT:    vle32.v v9, (a1)
+; CHECK-NEXT:    vle32.v v9, (a0)
+; CHECK-NEXT:    vle32.v v8, (a1)
 ; CHECK-NEXT:    vsetvli a1, zero, e32, m1, ta, ma
-; CHECK-NEXT:    vadd.vv v8, v8, v9
+; CHECK-NEXT:    vadd.vv v8, v9, v8
 ; CHECK-NEXT:    vsetvli zero, a2, e32, m1, ta, ma
 ; CHECK-NEXT:    vse32.v v8, (a0)
 ; CHECK-NEXT:    ret
@@ -76,10 +76,10 @@ define void @vfadd_vv_nxv1f32(<vscale x 1 x float>* %pa, <vscale x 1 x float>* %
 ; CHECK-NEXT:    csrr a2, vlenb
 ; CHECK-NEXT:    srli a2, a2, 3
 ; CHECK-NEXT:    vsetvli zero, a2, e32, m1, ta, ma
-; CHECK-NEXT:    vle32.v v8, (a0)
-; CHECK-NEXT:    vle32.v v9, (a1)
+; CHECK-NEXT:    vle32.v v9, (a0)
+; CHECK-NEXT:    vle32.v v8, (a1)
 ; CHECK-NEXT:    vsetvli a1, zero, e32, m1, ta, ma
-; CHECK-NEXT:    vfadd.vv v8, v8, v9
+; CHECK-NEXT:    vfadd.vv v8, v9, v8
 ; CHECK-NEXT:    vsetvli zero, a2, e32, m1, ta, ma
 ; CHECK-NEXT:    vse32.v v8, (a0)
 ; CHECK-NEXT:    ret

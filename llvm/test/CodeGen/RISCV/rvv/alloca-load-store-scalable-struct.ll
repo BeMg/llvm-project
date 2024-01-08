@@ -23,10 +23,10 @@ define <vscale x 1 x double> @test(%struct.test* %addr, i64 %vl) {
 ; CHECK-NEXT:    vs1r.v v8, (a0)
 ; CHECK-NEXT:    add a2, a0, a2
 ; CHECK-NEXT:    vs1r.v v9, (a2)
-; CHECK-NEXT:    vl1re64.v v8, (a2)
-; CHECK-NEXT:    vl1re64.v v9, (a0)
+; CHECK-NEXT:    vl1re64.v v9, (a2)
+; CHECK-NEXT:    vl1re64.v v8, (a0)
 ; CHECK-NEXT:    vsetvli zero, a1, e64, m1, ta, ma
-; CHECK-NEXT:    vfadd.vv v8, v9, v8
+; CHECK-NEXT:    vfadd.vv v8, v8, v9
 ; CHECK-NEXT:    csrrs a0, vlenb, zero
 ; CHECK-NEXT:    slli a0, a0, 1
 ; CHECK-NEXT:    add sp, sp, a0

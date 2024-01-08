@@ -8,11 +8,11 @@ define <1 x i1> @v1i1(i1 %x, i1 %y) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    vsetivli zero, 1, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmv.s.x v8, a0
-; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmsne.vi v9, v8, 0
 ; CHECK-NEXT:    andi a1, a1, 1
-; CHECK-NEXT:    vmv.s.x v9, a1
-; CHECK-NEXT:    vmsne.vi v9, v9, 0
-; CHECK-NEXT:    vmxor.mm v0, v8, v9
+; CHECK-NEXT:    vmv.s.x v8, a1
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmxor.mm v0, v9, v8
 ; CHECK-NEXT:    ret
   %head.x = insertelement <1 x i1> poison, i1 %x, i32 0
   %splat.x = shufflevector <1 x i1> %head.x, <1 x i1> poison, <1 x i32> zeroinitializer
@@ -28,15 +28,15 @@ define <2 x i1> @v2i1(i1 %x, i1 %y) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmv.v.x v8, a0
-; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmsne.vi v9, v8, 0
 ; CHECK-NEXT:    andi a1, a1, 1
-; CHECK-NEXT:    vmv.v.x v9, a1
-; CHECK-NEXT:    vmsne.vi v9, v9, 0
-; CHECK-NEXT:    vmxor.mm v0, v8, v9
+; CHECK-NEXT:    vmv.v.x v8, a1
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmxor.mm v0, v9, v8
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
-; CHECK-NEXT:    vrgather.vi v9, v8, 0
-; CHECK-NEXT:    vmsne.vi v0, v9, 0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
+; CHECK-NEXT:    vrgather.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    ret
   %head.x = insertelement <2 x i1> poison, i1 %x, i32 0
   %splat.x = shufflevector <2 x i1> %head.x, <2 x i1> poison, <2 x i32> zeroinitializer
@@ -52,15 +52,15 @@ define <4 x i1> @v4i1(i1 %x, i1 %y) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    vsetivli zero, 4, e8, mf4, ta, ma
 ; CHECK-NEXT:    vmv.v.x v8, a0
-; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmsne.vi v9, v8, 0
 ; CHECK-NEXT:    andi a1, a1, 1
-; CHECK-NEXT:    vmv.v.x v9, a1
-; CHECK-NEXT:    vmsne.vi v9, v9, 0
-; CHECK-NEXT:    vmxor.mm v0, v8, v9
+; CHECK-NEXT:    vmv.v.x v8, a1
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmxor.mm v0, v9, v8
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
-; CHECK-NEXT:    vrgather.vi v9, v8, 0
-; CHECK-NEXT:    vmsne.vi v0, v9, 0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
+; CHECK-NEXT:    vrgather.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    ret
   %head.x = insertelement <4 x i1> poison, i1 %x, i32 0
   %splat.x = shufflevector <4 x i1> %head.x, <4 x i1> poison, <4 x i32> zeroinitializer
@@ -76,15 +76,15 @@ define <8 x i1> @v8i1(i1 %x, i1 %y) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
 ; CHECK-NEXT:    vmv.v.x v8, a0
-; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmsne.vi v9, v8, 0
 ; CHECK-NEXT:    andi a1, a1, 1
-; CHECK-NEXT:    vmv.v.x v9, a1
-; CHECK-NEXT:    vmsne.vi v9, v9, 0
-; CHECK-NEXT:    vmxor.mm v0, v8, v9
+; CHECK-NEXT:    vmv.v.x v8, a1
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmxor.mm v0, v9, v8
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
-; CHECK-NEXT:    vrgather.vi v9, v8, 0
-; CHECK-NEXT:    vmsne.vi v0, v9, 0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
+; CHECK-NEXT:    vrgather.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    ret
   %head.x = insertelement <8 x i1> poison, i1 %x, i32 0
   %splat.x = shufflevector <8 x i1> %head.x, <8 x i1> poison, <8 x i32> zeroinitializer
@@ -100,15 +100,15 @@ define <16 x i1> @v16i1(i1 %x, i1 %y) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    vsetivli zero, 16, e8, m1, ta, ma
 ; CHECK-NEXT:    vmv.v.x v8, a0
-; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmsne.vi v9, v8, 0
 ; CHECK-NEXT:    andi a1, a1, 1
-; CHECK-NEXT:    vmv.v.x v9, a1
-; CHECK-NEXT:    vmsne.vi v9, v9, 0
-; CHECK-NEXT:    vmxor.mm v0, v8, v9
+; CHECK-NEXT:    vmv.v.x v8, a1
+; CHECK-NEXT:    vmsne.vi v8, v8, 0
+; CHECK-NEXT:    vmxor.mm v0, v9, v8
 ; CHECK-NEXT:    vmv.v.i v8, 0
-; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
-; CHECK-NEXT:    vrgather.vi v9, v8, 0
-; CHECK-NEXT:    vmsne.vi v0, v9, 0
+; CHECK-NEXT:    vmerge.vim v9, v8, 1, v0
+; CHECK-NEXT:    vrgather.vi v8, v9, 0
+; CHECK-NEXT:    vmsne.vi v0, v8, 0
 ; CHECK-NEXT:    ret
   %head.x = insertelement <16 x i1> poison, i1 %x, i32 0
   %splat.x = shufflevector <16 x i1> %head.x, <16 x i1> poison, <16 x i32> zeroinitializer
@@ -124,16 +124,17 @@ define <32 x i1> @v32i1(i1 %x, i1 %y) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    li a2, 32
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m2, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a0
-; CHECK-NEXT:    vmsne.vi v10, v8, 0
+; CHECK-NEXT:    vmv.v.x v10, a0
+; CHECK-NEXT:    vmsne.vi v9, v10, 0
 ; CHECK-NEXT:    andi a1, a1, 1
-; CHECK-NEXT:    vmv.v.x v8, a1
-; CHECK-NEXT:    vmsne.vi v11, v8, 0
-; CHECK-NEXT:    vmxor.mm v0, v10, v11
+; CHECK-NEXT:    vmv.v.x v10, a1
+; CHECK-NEXT:    vmsne.vi v8, v10, 0
+; CHECK-NEXT:    vmxor.mm v0, v9, v8
 ; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
 ; CHECK-NEXT:    vrgather.vi v10, v8, 0
-; CHECK-NEXT:    vmsne.vi v0, v10, 0
+; CHECK-NEXT:    vmsne.vi v8, v10, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %head.x = insertelement <32 x i1> poison, i1 %x, i32 0
   %splat.x = shufflevector <32 x i1> %head.x, <32 x i1> poison, <32 x i32> zeroinitializer
@@ -149,16 +150,17 @@ define <64 x i1> @v64i1(i1 %x, i1 %y) {
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    li a2, 64
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m4, ta, ma
-; CHECK-NEXT:    vmv.v.x v8, a0
-; CHECK-NEXT:    vmsne.vi v12, v8, 0
+; CHECK-NEXT:    vmv.v.x v12, a0
+; CHECK-NEXT:    vmsne.vi v9, v12, 0
 ; CHECK-NEXT:    andi a1, a1, 1
-; CHECK-NEXT:    vmv.v.x v8, a1
-; CHECK-NEXT:    vmsne.vi v13, v8, 0
-; CHECK-NEXT:    vmxor.mm v0, v12, v13
+; CHECK-NEXT:    vmv.v.x v12, a1
+; CHECK-NEXT:    vmsne.vi v8, v12, 0
+; CHECK-NEXT:    vmxor.mm v0, v9, v8
 ; CHECK-NEXT:    vmv.v.i v8, 0
 ; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
 ; CHECK-NEXT:    vrgather.vi v12, v8, 0
-; CHECK-NEXT:    vmsne.vi v0, v12, 0
+; CHECK-NEXT:    vmsne.vi v8, v12, 0
+; CHECK-NEXT:    vmv1r.v v0, v8
 ; CHECK-NEXT:    ret
   %head.x = insertelement <64 x i1> poison, i1 %x, i32 0
   %splat.x = shufflevector <64 x i1> %head.x, <64 x i1> poison, <64 x i32> zeroinitializer
@@ -465,12 +467,12 @@ define <1 x i64> @v1i64(i64 %x, i64 %y) {
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
 ; RV32-NEXT:    vsetivli zero, 1, e64, m1, ta, ma
-; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vlse64.v v9, (a0), zero
 ; RV32-NEXT:    sw a3, 4(sp)
 ; RV32-NEXT:    sw a2, 0(sp)
 ; RV32-NEXT:    mv a0, sp
-; RV32-NEXT:    vlse64.v v9, (a0), zero
-; RV32-NEXT:    vadd.vv v8, v8, v9
+; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vadd.vv v8, v9, v8
 ; RV32-NEXT:    addi sp, sp, 16
 ; RV32-NEXT:    ret
 ;
@@ -497,12 +499,12 @@ define <2 x i64> @v2i64(i64 %x, i64 %y) {
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
 ; RV32-NEXT:    vsetivli zero, 2, e64, m1, ta, ma
-; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vlse64.v v9, (a0), zero
 ; RV32-NEXT:    sw a3, 4(sp)
 ; RV32-NEXT:    sw a2, 0(sp)
 ; RV32-NEXT:    mv a0, sp
-; RV32-NEXT:    vlse64.v v9, (a0), zero
-; RV32-NEXT:    vadd.vv v9, v8, v9
+; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vadd.vv v9, v9, v8
 ; RV32-NEXT:    vrgather.vi v8, v9, 0
 ; RV32-NEXT:    addi sp, sp, 16
 ; RV32-NEXT:    ret
@@ -531,12 +533,12 @@ define <4 x i64> @v4i64(i64 %x, i64 %y) {
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
 ; RV32-NEXT:    vsetivli zero, 4, e64, m2, ta, ma
-; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vlse64.v v10, (a0), zero
 ; RV32-NEXT:    sw a3, 4(sp)
 ; RV32-NEXT:    sw a2, 0(sp)
 ; RV32-NEXT:    mv a0, sp
-; RV32-NEXT:    vlse64.v v10, (a0), zero
-; RV32-NEXT:    vadd.vv v10, v8, v10
+; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vadd.vv v10, v10, v8
 ; RV32-NEXT:    vrgather.vi v8, v10, 0
 ; RV32-NEXT:    addi sp, sp, 16
 ; RV32-NEXT:    ret
@@ -565,12 +567,12 @@ define <8 x i64> @v8i64(i64 %x, i64 %y) {
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
 ; RV32-NEXT:    vsetivli zero, 8, e64, m4, ta, ma
-; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vlse64.v v12, (a0), zero
 ; RV32-NEXT:    sw a3, 4(sp)
 ; RV32-NEXT:    sw a2, 0(sp)
 ; RV32-NEXT:    mv a0, sp
-; RV32-NEXT:    vlse64.v v12, (a0), zero
-; RV32-NEXT:    vadd.vv v12, v8, v12
+; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vadd.vv v12, v12, v8
 ; RV32-NEXT:    vrgather.vi v8, v12, 0
 ; RV32-NEXT:    addi sp, sp, 16
 ; RV32-NEXT:    ret

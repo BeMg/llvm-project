@@ -7,11 +7,12 @@ declare <4 x half> @llvm.vp.uitofp.v4f16.v4i1(<4 x i1>, <4 x i1>, i32)
 define <4 x half> @vuitofp_v4f16_v4i1(<4 x i1> %va, <4 x i1> %m, i32 zeroext %evl) {
 ; CHECK-LABEL: vuitofp_v4f16_v4i1:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v9, v8
 ; CHECK-NEXT:    vsetvli zero, a0, e16, mf2, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
-; CHECK-NEXT:    vmerge.vim v9, v9, 1, v0
-; CHECK-NEXT:    vmv1r.v v0, v8
-; CHECK-NEXT:    vfcvt.f.xu.v v8, v9, v0.t
+; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmv1r.v v0, v9
+; CHECK-NEXT:    vfcvt.f.xu.v v8, v8, v0.t
 ; CHECK-NEXT:    ret
   %v = call <4 x half> @llvm.vp.uitofp.v4f16.v4i1(<4 x i1> %va, <4 x i1> %m, i32 %evl)
   ret <4 x half> %v
@@ -34,11 +35,12 @@ declare <4 x float> @llvm.vp.uitofp.v4f32.v4i1(<4 x i1>, <4 x i1>, i32)
 define <4 x float> @vuitofp_v4f32_v4i1(<4 x i1> %va, <4 x i1> %m, i32 zeroext %evl) {
 ; CHECK-LABEL: vuitofp_v4f32_v4i1:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v9, v8
 ; CHECK-NEXT:    vsetvli zero, a0, e32, m1, ta, ma
-; CHECK-NEXT:    vmv.v.i v9, 0
-; CHECK-NEXT:    vmerge.vim v9, v9, 1, v0
-; CHECK-NEXT:    vmv1r.v v0, v8
-; CHECK-NEXT:    vfcvt.f.xu.v v8, v9, v0.t
+; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmv1r.v v0, v9
+; CHECK-NEXT:    vfcvt.f.xu.v v8, v8, v0.t
 ; CHECK-NEXT:    ret
   %v = call <4 x float> @llvm.vp.uitofp.v4f32.v4i1(<4 x i1> %va, <4 x i1> %m, i32 %evl)
   ret <4 x float> %v
@@ -61,11 +63,12 @@ declare <4 x double> @llvm.vp.uitofp.v4f64.v4i1(<4 x i1>, <4 x i1>, i32)
 define <4 x double> @vuitofp_v4f64_v4i1(<4 x i1> %va, <4 x i1> %m, i32 zeroext %evl) {
 ; CHECK-LABEL: vuitofp_v4f64_v4i1:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv1r.v v10, v8
 ; CHECK-NEXT:    vsetvli zero, a0, e64, m2, ta, ma
-; CHECK-NEXT:    vmv.v.i v10, 0
-; CHECK-NEXT:    vmerge.vim v10, v10, 1, v0
-; CHECK-NEXT:    vmv1r.v v0, v8
-; CHECK-NEXT:    vfcvt.f.xu.v v8, v10, v0.t
+; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmerge.vim v8, v8, 1, v0
+; CHECK-NEXT:    vmv1r.v v0, v10
+; CHECK-NEXT:    vfcvt.f.xu.v v8, v8, v0.t
 ; CHECK-NEXT:    ret
   %v = call <4 x double> @llvm.vp.uitofp.v4f64.v4i1(<4 x i1> %va, <4 x i1> %m, i32 %evl)
   ret <4 x double> %v

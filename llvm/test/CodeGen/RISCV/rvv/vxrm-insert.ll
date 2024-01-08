@@ -84,11 +84,12 @@ define <vscale x 1 x i8> @test3(<vscale x 1 x i8> %0, <vscale x 1 x i8> %1, <vsc
 ; RV32-NEXT:    csrwi vxrm, 0
 ; RV32-NEXT:    vaadd.vv v8, v8, v9
 ; RV32-NEXT:    call foo@plt
+; RV32-NEXT:    vmv1r.v v9, v8
 ; RV32-NEXT:    vsetvli zero, s0, e8, mf8, ta, ma
 ; RV32-NEXT:    csrwi vxrm, 0
 ; RV32-NEXT:    addi a0, sp, 16
-; RV32-NEXT:    vl1r.v v9, (a0) # Unknown-size Folded Reload
-; RV32-NEXT:    vaadd.vv v8, v8, v9
+; RV32-NEXT:    vl1r.v v8, (a0) # Unknown-size Folded Reload
+; RV32-NEXT:    vaadd.vv v8, v9, v8
 ; RV32-NEXT:    csrr a0, vlenb
 ; RV32-NEXT:    slli a0, a0, 1
 ; RV32-NEXT:    add sp, sp, a0
@@ -112,11 +113,12 @@ define <vscale x 1 x i8> @test3(<vscale x 1 x i8> %0, <vscale x 1 x i8> %1, <vsc
 ; RV64-NEXT:    csrwi vxrm, 0
 ; RV64-NEXT:    vaadd.vv v8, v8, v9
 ; RV64-NEXT:    call foo@plt
+; RV64-NEXT:    vmv1r.v v9, v8
 ; RV64-NEXT:    vsetvli zero, s0, e8, mf8, ta, ma
 ; RV64-NEXT:    csrwi vxrm, 0
 ; RV64-NEXT:    addi a0, sp, 16
-; RV64-NEXT:    vl1r.v v9, (a0) # Unknown-size Folded Reload
-; RV64-NEXT:    vaadd.vv v8, v8, v9
+; RV64-NEXT:    vl1r.v v8, (a0) # Unknown-size Folded Reload
+; RV64-NEXT:    vaadd.vv v8, v9, v8
 ; RV64-NEXT:    csrr a0, vlenb
 ; RV64-NEXT:    slli a0, a0, 1
 ; RV64-NEXT:    add sp, sp, a0
@@ -394,9 +396,9 @@ define void @test10(i8* nocapture %ptr_dest, i8* nocapture readonly %ptr_op1, i8
 ; CHECK-NEXT:  .LBB9_2: # %for.body
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    vsetvli a4, a3, e8, mf8, ta, ma
-; CHECK-NEXT:    vle8.v v8, (a1)
-; CHECK-NEXT:    vle8.v v9, (a2)
-; CHECK-NEXT:    vaadd.vv v8, v8, v9
+; CHECK-NEXT:    vle8.v v9, (a1)
+; CHECK-NEXT:    vle8.v v8, (a2)
+; CHECK-NEXT:    vaadd.vv v8, v9, v8
 ; CHECK-NEXT:    sub a3, a3, a4
 ; CHECK-NEXT:    vse8.v v8, (a0)
 ; CHECK-NEXT:    bnez a3, .LBB9_2
@@ -430,20 +432,20 @@ define void @test11(i8* nocapture %ptr_dest, i8* nocapture readonly %ptr_op1, i8
 ; CHECK-LABEL: test11:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    vsetvli a4, a3, e8, mf8, ta, ma
-; CHECK-NEXT:    vle8.v v8, (a1)
-; CHECK-NEXT:    vle8.v v9, (a2)
+; CHECK-NEXT:    vle8.v v9, (a1)
+; CHECK-NEXT:    vle8.v v8, (a2)
 ; CHECK-NEXT:    csrwi vxrm, 2
 ; CHECK-NEXT:  .LBB10_1: # %for.body
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    vaadd.vv v8, v8, v9
+; CHECK-NEXT:    vaadd.vv v8, v9, v8
 ; CHECK-NEXT:    sub a3, a3, a4
 ; CHECK-NEXT:    vse8.v v8, (a0)
 ; CHECK-NEXT:    beqz a3, .LBB10_3
 ; CHECK-NEXT:  # %bb.2: # %for.body
 ; CHECK-NEXT:    # in Loop: Header=BB10_1 Depth=1
 ; CHECK-NEXT:    vsetvli a4, a3, e8, mf8, ta, ma
-; CHECK-NEXT:    vle8.v v8, (a1)
-; CHECK-NEXT:    vle8.v v9, (a2)
+; CHECK-NEXT:    vle8.v v9, (a1)
+; CHECK-NEXT:    vle8.v v8, (a2)
 ; CHECK-NEXT:    j .LBB10_1
 ; CHECK-NEXT:  .LBB10_3: # %for.end
 ; CHECK-NEXT:    ret
@@ -479,18 +481,19 @@ for.end:
 define <vscale x 1 x i8> @test12(i1 %c1, <vscale x 1 x i8> %0, <vscale x 1 x i8> %1, iXLen %vl) {
 ; CHECK-LABEL: test12:
 ; CHECK:       # %bb.0: # %entry
+; CHECK-NEXT:    vmv1r.v v10, v8
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    vsetvli zero, a1, e8, mf8, ta, ma
 ; CHECK-NEXT:    csrwi vxrm, 0
-; CHECK-NEXT:    vaadd.vv v9, v8, v9
+; CHECK-NEXT:    vaadd.vv v8, v8, v9
 ; CHECK-NEXT:    beqz a0, .LBB11_2
 ; CHECK-NEXT:  # %bb.1: # %block1
 ; CHECK-NEXT:    csrwi vxrm, 1
-; CHECK-NEXT:    vaadd.vv v9, v8, v9
+; CHECK-NEXT:    vaadd.vv v8, v10, v8
 ; CHECK-NEXT:    csrwi vxrm, 2
 ; CHECK-NEXT:  .LBB11_2: # %block2
 ; CHECK-NEXT:    csrwi vxrm, 2
-; CHECK-NEXT:    vaadd.vv v8, v8, v9
+; CHECK-NEXT:    vaadd.vv v8, v10, v8
 ; CHECK-NEXT:    ret
 entry:
   %a = call <vscale x 1 x i8> @llvm.riscv.vaadd.nxv1i8.nxv1i8(<vscale x 1 x i8> undef, <vscale x 1 x i8> %0, <vscale x 1 x i8> %1, iXLen 0, iXLen %vl)
@@ -512,23 +515,24 @@ block2:
 define <vscale x 1 x i8> @test13(i1 %c1, i1 %c2, i1 %c3, <vscale x 1 x i8> %0, <vscale x 1 x i8> %1, iXLen %vl) {
 ; CHECK-LABEL: test13:
 ; CHECK:       # %bb.0: # %entry
+; CHECK-NEXT:    vmv1r.v v10, v8
 ; CHECK-NEXT:    andi a0, a0, 1
 ; CHECK-NEXT:    vsetvli zero, a3, e8, mf8, ta, ma
 ; CHECK-NEXT:    csrwi vxrm, 0
-; CHECK-NEXT:    vaadd.vv v10, v8, v9
+; CHECK-NEXT:    vaadd.vv v8, v8, v9
 ; CHECK-NEXT:    beqz a0, .LBB12_2
 ; CHECK-NEXT:  # %bb.1: # %block1
 ; CHECK-NEXT:    csrwi vxrm, 1
-; CHECK-NEXT:    vaadd.vv v10, v8, v10
+; CHECK-NEXT:    vaadd.vv v8, v10, v8
 ; CHECK-NEXT:    andi a1, a1, 1
 ; CHECK-NEXT:    csrwi vxrm, 2
 ; CHECK-NEXT:    beqz a1, .LBB12_3
 ; CHECK-NEXT:  .LBB12_2: # %block2
 ; CHECK-NEXT:    csrwi vxrm, 2
-; CHECK-NEXT:    vaadd.vv v8, v8, v10
+; CHECK-NEXT:    vaadd.vv v8, v10, v8
 ; CHECK-NEXT:    ret
 ; CHECK-NEXT:  .LBB12_3: # %block3
-; CHECK-NEXT:    vaadd.vv v8, v9, v10
+; CHECK-NEXT:    vaadd.vv v8, v9, v8
 ; CHECK-NEXT:    ret
 entry:
   %a = call <vscale x 1 x i8> @llvm.riscv.vaadd.nxv1i8.nxv1i8(<vscale x 1 x i8> undef, <vscale x 1 x i8> %0, <vscale x 1 x i8> %1, iXLen 0, iXLen %vl)

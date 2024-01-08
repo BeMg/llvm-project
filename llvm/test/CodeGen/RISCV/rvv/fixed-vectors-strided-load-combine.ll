@@ -25,16 +25,16 @@ define void @widen_3xv4i16(ptr %x, ptr %z) {
 ; CHECK-LABEL: widen_3xv4i16:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e16, mf2, ta, ma
-; CHECK-NEXT:    vle16.v v8, (a0)
+; CHECK-NEXT:    vle16.v v12, (a0)
 ; CHECK-NEXT:    addi a2, a0, 8
 ; CHECK-NEXT:    vle16.v v10, (a2)
 ; CHECK-NEXT:    addi a0, a0, 16
-; CHECK-NEXT:    vle16.v v12, (a0)
+; CHECK-NEXT:    vle16.v v8, (a0)
 ; CHECK-NEXT:    vsetivli zero, 8, e16, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 4
+; CHECK-NEXT:    vslideup.vi v12, v10, 4
 ; CHECK-NEXT:    vsetivli zero, 12, e16, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v12, 8
-; CHECK-NEXT:    vse16.v v8, (a1)
+; CHECK-NEXT:    vslideup.vi v12, v8, 8
+; CHECK-NEXT:    vse16.v v12, (a1)
 ; CHECK-NEXT:    ret
   %a = load <4 x i16>, ptr %x
   %b.gep = getelementptr i8, ptr %x, i64 8
@@ -73,20 +73,20 @@ define void @widen_4xv4i16_unaligned(ptr %x, ptr %z) {
 ; CHECK-NO-MISALIGN-LABEL: widen_4xv4i16_unaligned:
 ; CHECK-NO-MISALIGN:       # %bb.0:
 ; CHECK-NO-MISALIGN-NEXT:    vsetivli zero, 8, e8, mf2, ta, ma
-; CHECK-NO-MISALIGN-NEXT:    vle8.v v8, (a0)
-; CHECK-NO-MISALIGN-NEXT:    addi a2, a0, 8
-; CHECK-NO-MISALIGN-NEXT:    vle8.v v10, (a2)
-; CHECK-NO-MISALIGN-NEXT:    addi a2, a0, 16
-; CHECK-NO-MISALIGN-NEXT:    vle8.v v12, (a2)
-; CHECK-NO-MISALIGN-NEXT:    addi a0, a0, 24
 ; CHECK-NO-MISALIGN-NEXT:    vle8.v v14, (a0)
+; CHECK-NO-MISALIGN-NEXT:    addi a2, a0, 8
+; CHECK-NO-MISALIGN-NEXT:    vle8.v v12, (a2)
+; CHECK-NO-MISALIGN-NEXT:    addi a2, a0, 16
+; CHECK-NO-MISALIGN-NEXT:    vle8.v v10, (a2)
+; CHECK-NO-MISALIGN-NEXT:    addi a0, a0, 24
+; CHECK-NO-MISALIGN-NEXT:    vle8.v v8, (a0)
 ; CHECK-NO-MISALIGN-NEXT:    vsetivli zero, 8, e16, m2, tu, ma
-; CHECK-NO-MISALIGN-NEXT:    vslideup.vi v8, v10, 4
+; CHECK-NO-MISALIGN-NEXT:    vslideup.vi v14, v12, 4
 ; CHECK-NO-MISALIGN-NEXT:    vsetivli zero, 12, e16, m2, tu, ma
-; CHECK-NO-MISALIGN-NEXT:    vslideup.vi v8, v12, 8
+; CHECK-NO-MISALIGN-NEXT:    vslideup.vi v14, v10, 8
 ; CHECK-NO-MISALIGN-NEXT:    vsetivli zero, 16, e16, m2, ta, ma
-; CHECK-NO-MISALIGN-NEXT:    vslideup.vi v8, v14, 12
-; CHECK-NO-MISALIGN-NEXT:    vse16.v v8, (a1)
+; CHECK-NO-MISALIGN-NEXT:    vslideup.vi v14, v8, 12
+; CHECK-NO-MISALIGN-NEXT:    vse16.v v14, (a1)
 ; CHECK-NO-MISALIGN-NEXT:    ret
 ;
 ; RV64-MISALIGN-LABEL: widen_4xv4i16_unaligned:
@@ -148,12 +148,12 @@ define void @strided_constant_v4i32(ptr %x, ptr %z) {
 ; CHECK-LABEL: strided_constant_v4i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, ma
-; CHECK-NEXT:    vle32.v v8, (a0)
-; CHECK-NEXT:    addi a0, a0, 32
 ; CHECK-NEXT:    vle32.v v10, (a0)
+; CHECK-NEXT:    addi a0, a0, 32
+; CHECK-NEXT:    vle32.v v8, (a0)
 ; CHECK-NEXT:    vsetivli zero, 8, e32, m2, ta, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 4
-; CHECK-NEXT:    vse32.v v8, (a1)
+; CHECK-NEXT:    vslideup.vi v10, v8, 4
+; CHECK-NEXT:    vse32.v v10, (a1)
 ; CHECK-NEXT:    ret
   %a = load <4 x i32>, ptr %x
   %b.gep = getelementptr i8, ptr %x, i64 32
@@ -168,11 +168,11 @@ define void @strided_constant_0(ptr %x, ptr %z) {
 ; CHECK-LABEL: strided_constant_0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e16, mf2, ta, ma
-; CHECK-NEXT:    vle16.v v8, (a0)
+; CHECK-NEXT:    vle16.v v9, (a0)
 ; CHECK-NEXT:    vsetivli zero, 8, e16, m1, ta, ma
-; CHECK-NEXT:    vmv1r.v v9, v8
-; CHECK-NEXT:    vslideup.vi v9, v8, 4
-; CHECK-NEXT:    vse16.v v9, (a1)
+; CHECK-NEXT:    vmv1r.v v8, v9
+; CHECK-NEXT:    vslideup.vi v8, v9, 4
+; CHECK-NEXT:    vse16.v v8, (a1)
 ; CHECK-NEXT:    ret
   %a = load <4 x i16>, ptr %x
   %b = load <4 x i16>, ptr %x
@@ -186,20 +186,20 @@ define void @strided_constant_mismatch_4xv4i16(ptr %x, ptr %z) {
 ; CHECK-LABEL: strided_constant_mismatch_4xv4i16:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 4, e16, mf2, ta, ma
-; CHECK-NEXT:    vle16.v v8, (a0)
+; CHECK-NEXT:    vle16.v v10, (a0)
 ; CHECK-NEXT:    addi a2, a0, 2
-; CHECK-NEXT:    vle16.v v10, (a2)
+; CHECK-NEXT:    vle16.v v8, (a2)
 ; CHECK-NEXT:    addi a2, a0, 6
-; CHECK-NEXT:    vle16.v v12, (a2)
+; CHECK-NEXT:    vle16.v v14, (a2)
 ; CHECK-NEXT:    addi a0, a0, 8
-; CHECK-NEXT:    vle16.v v14, (a0)
+; CHECK-NEXT:    vle16.v v12, (a0)
 ; CHECK-NEXT:    vsetivli zero, 8, e16, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v10, 4
+; CHECK-NEXT:    vslideup.vi v10, v8, 4
 ; CHECK-NEXT:    vsetivli zero, 12, e16, m2, tu, ma
-; CHECK-NEXT:    vslideup.vi v8, v12, 8
+; CHECK-NEXT:    vslideup.vi v10, v14, 8
 ; CHECK-NEXT:    vsetivli zero, 16, e16, m2, ta, ma
-; CHECK-NEXT:    vslideup.vi v8, v14, 12
-; CHECK-NEXT:    vse16.v v8, (a1)
+; CHECK-NEXT:    vslideup.vi v10, v12, 12
+; CHECK-NEXT:    vse16.v v10, (a1)
 ; CHECK-NEXT:    ret
   %a = load <4 x i16>, ptr %x
   %b.gep = getelementptr i8, ptr %x, i64 2
@@ -256,58 +256,58 @@ define void @strided_runtime_mismatch_4xv4i16(ptr %x, ptr %z, i64 %s, i64 %t) {
 ; RV32-LABEL: strided_runtime_mismatch_4xv4i16:
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    vsetivli zero, 4, e16, mf2, ta, ma
-; RV32-NEXT:    vle16.v v8, (a0)
-; RV32-NEXT:    add a0, a0, a2
 ; RV32-NEXT:    vle16.v v10, (a0)
+; RV32-NEXT:    add a0, a0, a2
+; RV32-NEXT:    vle16.v v14, (a0)
 ; RV32-NEXT:    add a0, a0, a4
 ; RV32-NEXT:    vle16.v v12, (a0)
 ; RV32-NEXT:    add a0, a0, a2
-; RV32-NEXT:    vle16.v v14, (a0)
+; RV32-NEXT:    vle16.v v8, (a0)
 ; RV32-NEXT:    vsetivli zero, 8, e16, m2, tu, ma
-; RV32-NEXT:    vslideup.vi v8, v10, 4
+; RV32-NEXT:    vslideup.vi v10, v14, 4
 ; RV32-NEXT:    vsetivli zero, 12, e16, m2, tu, ma
-; RV32-NEXT:    vslideup.vi v8, v12, 8
+; RV32-NEXT:    vslideup.vi v10, v12, 8
 ; RV32-NEXT:    vsetivli zero, 16, e16, m2, ta, ma
-; RV32-NEXT:    vslideup.vi v8, v14, 12
-; RV32-NEXT:    vse16.v v8, (a1)
+; RV32-NEXT:    vslideup.vi v10, v8, 12
+; RV32-NEXT:    vse16.v v10, (a1)
 ; RV32-NEXT:    ret
 ;
 ; RV64-LABEL: strided_runtime_mismatch_4xv4i16:
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    vsetivli zero, 4, e16, mf2, ta, ma
-; RV64-NEXT:    vle16.v v8, (a0)
+; RV64-NEXT:    vle16.v v12, (a0)
 ; RV64-NEXT:    add a0, a0, a2
 ; RV64-NEXT:    vle16.v v10, (a0)
 ; RV64-NEXT:    add a0, a0, a3
-; RV64-NEXT:    vle16.v v12, (a0)
+; RV64-NEXT:    vle16.v v8, (a0)
 ; RV64-NEXT:    add a0, a0, a2
 ; RV64-NEXT:    vle16.v v14, (a0)
 ; RV64-NEXT:    vsetivli zero, 8, e16, m2, tu, ma
-; RV64-NEXT:    vslideup.vi v8, v10, 4
+; RV64-NEXT:    vslideup.vi v12, v10, 4
 ; RV64-NEXT:    vsetivli zero, 12, e16, m2, tu, ma
-; RV64-NEXT:    vslideup.vi v8, v12, 8
+; RV64-NEXT:    vslideup.vi v12, v8, 8
 ; RV64-NEXT:    vsetivli zero, 16, e16, m2, ta, ma
-; RV64-NEXT:    vslideup.vi v8, v14, 12
-; RV64-NEXT:    vse16.v v8, (a1)
+; RV64-NEXT:    vslideup.vi v12, v14, 12
+; RV64-NEXT:    vse16.v v12, (a1)
 ; RV64-NEXT:    ret
 ;
 ; ZVE64F-LABEL: strided_runtime_mismatch_4xv4i16:
 ; ZVE64F:       # %bb.0:
 ; ZVE64F-NEXT:    vsetivli zero, 4, e16, mf2, ta, ma
-; ZVE64F-NEXT:    vle16.v v8, (a0)
+; ZVE64F-NEXT:    vle16.v v12, (a0)
 ; ZVE64F-NEXT:    add a0, a0, a2
 ; ZVE64F-NEXT:    vle16.v v10, (a0)
 ; ZVE64F-NEXT:    add a0, a0, a3
-; ZVE64F-NEXT:    vle16.v v12, (a0)
+; ZVE64F-NEXT:    vle16.v v8, (a0)
 ; ZVE64F-NEXT:    add a0, a0, a2
 ; ZVE64F-NEXT:    vle16.v v14, (a0)
 ; ZVE64F-NEXT:    vsetivli zero, 8, e16, m2, tu, ma
-; ZVE64F-NEXT:    vslideup.vi v8, v10, 4
+; ZVE64F-NEXT:    vslideup.vi v12, v10, 4
 ; ZVE64F-NEXT:    vsetivli zero, 12, e16, m2, tu, ma
-; ZVE64F-NEXT:    vslideup.vi v8, v12, 8
+; ZVE64F-NEXT:    vslideup.vi v12, v8, 8
 ; ZVE64F-NEXT:    vsetivli zero, 16, e16, m2, ta, ma
-; ZVE64F-NEXT:    vslideup.vi v8, v14, 12
-; ZVE64F-NEXT:    vse16.v v8, (a1)
+; ZVE64F-NEXT:    vslideup.vi v12, v14, 12
+; ZVE64F-NEXT:    vse16.v v12, (a1)
 ; ZVE64F-NEXT:    ret
   %a = load <4 x i16>, ptr %x
   %b.gep = getelementptr i8, ptr %x, i64 %s

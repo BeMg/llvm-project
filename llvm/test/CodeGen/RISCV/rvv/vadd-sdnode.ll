@@ -869,12 +869,12 @@ define <vscale x 8 x i64> @vadd_xx_nxv8i64(i64 %a, i64 %b) nounwind {
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
 ; RV32-NEXT:    vsetvli a1, zero, e64, m8, ta, ma
-; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vlse64.v v16, (a0), zero
 ; RV32-NEXT:    sw a3, 4(sp)
 ; RV32-NEXT:    sw a2, 0(sp)
 ; RV32-NEXT:    mv a0, sp
-; RV32-NEXT:    vlse64.v v16, (a0), zero
-; RV32-NEXT:    vadd.vv v8, v8, v16
+; RV32-NEXT:    vlse64.v v8, (a0), zero
+; RV32-NEXT:    vadd.vv v8, v16, v8
 ; RV32-NEXT:    addi sp, sp, 16
 ; RV32-NEXT:    ret
 ;
@@ -932,10 +932,11 @@ define <vscale x 8 x i32> @vadd_vi_mask_nxv8i32(<vscale x 8 x i32> %va, <vscale 
 define <vscale x 8 x i32> @vadd_vv_mask_negative0_nxv8i32(<vscale x 8 x i32> %va, <vscale x 8 x i32> %vb, <vscale x 8 x i1> %mask) {
 ; CHECK-LABEL: vadd_vv_mask_negative0_nxv8i32:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv4r.v v20, v8
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m4, ta, ma
-; CHECK-NEXT:    vmv.v.i v16, 1
-; CHECK-NEXT:    vmerge.vvm v12, v16, v12, v0
-; CHECK-NEXT:    vadd.vv v8, v8, v12
+; CHECK-NEXT:    vmv.v.i v8, 1
+; CHECK-NEXT:    vmerge.vvm v8, v8, v12, v0
+; CHECK-NEXT:    vadd.vv v8, v20, v8
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 8 x i32> poison, i32 1, i32 0
   %one = shufflevector <vscale x 8 x i32> %head, <vscale x 8 x i32> poison, <vscale x 8 x i32> zeroinitializer
@@ -947,10 +948,11 @@ define <vscale x 8 x i32> @vadd_vv_mask_negative0_nxv8i32(<vscale x 8 x i32> %va
 define <vscale x 8 x i32> @vadd_vv_mask_negative1_nxv8i32(<vscale x 8 x i32> %va, <vscale x 8 x i32> %vb, <vscale x 8 x i1> %mask) {
 ; CHECK-LABEL: vadd_vv_mask_negative1_nxv8i32:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    vmv4r.v v20, v8
 ; CHECK-NEXT:    vsetvli a0, zero, e32, m4, ta, ma
-; CHECK-NEXT:    vmv.v.i v16, 0
-; CHECK-NEXT:    vmerge.vvm v12, v16, v12, v0
-; CHECK-NEXT:    vadd.vv v8, v8, v12
+; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmerge.vvm v12, v8, v12, v0
+; CHECK-NEXT:    vadd.vv v8, v20, v12
 ; CHECK-NEXT:    vadd.vv v8, v8, v12
 ; CHECK-NEXT:    ret
   %vs = select <vscale x 8 x i1> %mask, <vscale x 8 x i32> %vb, <vscale x 8 x i32> zeroinitializer
