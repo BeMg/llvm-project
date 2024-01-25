@@ -100,6 +100,10 @@ static cl::opt<bool> EnableMISchedLoadClustering(
     cl::desc("Enable load clustering in the machine scheduler"),
     cl::init(false));
 
+static cl::opt<bool> EnableVSETVLIAfterRVVRegAlloc(
+    "riscv-vsetvli-after-rvv-regalloc", cl::Hidden,
+    cl::desc("vsetvl insertion after rvv regalloc"), cl::init(false));
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   RegisterTargetMachine<RISCVTargetMachine> X(getTheRISCV32Target());
   RegisterTargetMachine<RISCVTargetMachine> Y(getTheRISCV64Target());
@@ -422,8 +426,11 @@ FunctionPass *RISCVPassConfig::createRVVRegAllocPass(bool Optimized) {
 }
 
 bool RISCVPassConfig::addRegAssignAndRewriteFast() {
-  if (EnableSplitRegAlloc)
+  if (EnableSplitRegAlloc) {
     addPass(createRVVRegAllocPass(false));
+    if (EnableVSETVLIAfterRVVRegAlloc)
+      addPass(createRISCVInsertVSETVLIPass());
+  }
   return TargetPassConfig::addRegAssignAndRewriteFast();
 }
 
@@ -431,6 +438,8 @@ bool RISCVPassConfig::addRegAssignAndRewriteOptimized() {
   if (EnableSplitRegAlloc) {
     addPass(createRVVRegAllocPass(true));
     addPass(createVirtRegRewriter(false));
+    if (EnableVSETVLIAfterRVVRegAlloc)
+      addPass(createRISCVInsertVSETVLIPass());
   }
   return TargetPassConfig::addRegAssignAndRewriteOptimized();
 }
@@ -564,7 +573,8 @@ void RISCVPassConfig::addPreRegAlloc() {
   addPass(createRISCVPreRAExpandPseudoPass());
   if (TM->getOptLevel() != CodeGenOptLevel::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
-  addPass(createRISCVInsertVSETVLIPass());
+  if (!EnableSplitRegAlloc || !EnableVSETVLIAfterRVVRegAlloc)
+    addPass(createRISCVInsertVSETVLIPass());
   if (TM->getOptLevel() != CodeGenOptLevel::None &&
       EnableRISCVDeadRegisterElimination)
     addPass(createRISCVDeadRegisterDefinitionsPass());
