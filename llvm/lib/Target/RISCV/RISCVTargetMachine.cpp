@@ -16,6 +16,7 @@
 #include "RISCVMachineFunctionInfo.h"
 #include "RISCVTargetObjectFile.h"
 #include "RISCVTargetTransformInfo.h"
+#include "RISCVVSETVLCluster.h"
 #include "TargetInfo/RISCVTargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -104,6 +105,11 @@ static cl::opt<bool> EnableMISchedLoadClustering(
 static cl::opt<bool> EnableVSETVLIAfterRVVRegAlloc(
     "riscv-vsetvli-after-rvv-regalloc", cl::Hidden,
     cl::desc("vsetvl insertion after rvv regalloc"), cl::init(false));
+
+static cl::opt<bool>
+    EnableVSETVLIClustering("riscv-vsetvli-cluster", cl::Hidden,
+                            cl::desc("vsetvl insertion clustring"),
+                            cl::init(false));
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   RegisterTargetMachine<RISCVTargetMachine> X(getTheRISCV32Target());
@@ -370,6 +376,10 @@ public:
     if (!MacroFusions.empty()) {
       DAG = DAG ? DAG : createGenericSchedLive(C);
       DAG->addMutation(createMacroFusionDAGMutation(MacroFusions));
+    }
+    if (EnableVSETVLIClustering) {
+      DAG = DAG ? DAG : createGenericSchedLive(C);
+      DAG->addMutation(createRISCVVSETVLClusteringDAGMutation());
     }
     return DAG;
   }
