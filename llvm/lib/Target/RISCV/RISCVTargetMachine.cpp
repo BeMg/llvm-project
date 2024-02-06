@@ -17,6 +17,7 @@
 #include "RISCVMachineScheduler.h"
 #include "RISCVTargetObjectFile.h"
 #include "RISCVTargetTransformInfo.h"
+#include "RISCVVSETVLCluster.h"
 #include "TargetInfo/RISCVTargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -106,6 +107,11 @@ static cl::opt<bool>
     EnableVSETVLIAwareSche("riscv-vsetvli-aware-sched", cl::Hidden,
                            cl::desc("RISC-V vsetvl aware scheduler"),
                            cl::init(false));
+
+static cl::opt<bool>
+    EnableVSETVLIClustering("riscv-vsetvli-cluster", cl::Hidden,
+                            cl::desc("vsetvl insertion clustring"),
+                            cl::init(false));
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   RegisterTargetMachine<RISCVTargetMachine> X(getTheRISCV32Target());
@@ -356,6 +362,11 @@ public:
       DAG = DAG ? DAG : createGenericSchedLive(C);
       DAG->addMutation(createLoadClusterDAGMutation(
           DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
+    }
+
+    if (EnableVSETVLIClustering) {
+      DAG = DAG ? DAG : createGenericSchedLive(C);
+      DAG->addMutation(createRISCVVSETVLClusteringDAGMutation());
     }
     return DAG;
   }

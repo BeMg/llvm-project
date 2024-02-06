@@ -10,6 +10,7 @@
 #define LLVM_LIB_TARGET_RISCV_VSETVL_CLUSTERING_H
 
 #include "llvm/CodeGen/ScheduleDAGMutation.h"
+#include "RISCVInsertVSETVLI.h"
 #include <memory>
 
 namespace llvm {
