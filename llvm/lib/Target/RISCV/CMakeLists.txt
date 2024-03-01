@@ -32,6 +32,7 @@ add_llvm_target(RISCVCodeGen
   RISCVCodeGenPrepare.cpp
   RISCVDeadRegisterDefinitions.cpp
   RISCVMakeCompressible.cpp
+  RISCVMachineScheduler.cpp
   RISCVExpandAtomicPseudoInsts.cpp
   RISCVExpandPseudoInsts.cpp
   RISCVFoldMasks.cpp
