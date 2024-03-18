@@ -3626,6 +3626,32 @@ bool Sema::checkTargetClonesAttrString(
       if (hasArmStreamingInterface(cast<FunctionDecl>(D)))
         return Diag(LiteralLoc,
                     diag::err_sme_streaming_cannot_be_multiversioned);
+    } else if (TInfo.getTriple().isRISCV()) {
+
+      if (Str.starts_with("arch=")) {
+
+        // Skip comma-separated list of versions
+        // Like arch=+v,+zbb
+        if ((!Cur.starts_with("arch=")))
+          continue;
+
+        ParsedTargetAttr TargetAttr =
+            Context.getTargetInfo().parseTargetAttr(Str);
+        if (TargetAttr.Features.empty())
+          return Diag(CurLoc, diag::warn_unsupported_target_attribute)
+                 << Unsupported << None << Str << TargetClones;
+      } else if (Str == "default") {
+        DefaultIsDupe = HasDefault;
+        HasDefault = true;
+      } else {
+        return Diag(CurLoc, diag::warn_unsupported_target_attribute)
+               << Unsupported << None << Str << TargetClones;
+      }
+      if (llvm::is_contained(StringsBuffer, Str) || DefaultIsDupe)
+        Diag(CurLoc, diag::warn_target_clone_duplicate_options);
+      // Note: Add even if there are duplicates, since it changes name mangling.
+      StringsBuffer.push_back(Str);
+
     } else {
       // Other targets ( currently X86 )
       if (Cur.starts_with("arch=")) {
