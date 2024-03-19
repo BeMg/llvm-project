@@ -119,6 +119,109 @@ void getFeaturesForCPU(StringRef CPU,
     else
       EnabledFeatures.push_back(F.substr(1));
 }
+
+std::vector<unsigned long long> getBaseExtensionKey(ArrayRef<StringRef> Exts) {
+  std::vector<unsigned long long> Result;
+  for (auto Ext : Exts) {
+    unsigned long long ExtKey = 0;
+    if (Ext.starts_with("i") || Ext.starts_with("m") || Ext.starts_with("a")) {
+      ExtKey = RISCV_HWPROBE_BASE_BEHAVIOR_IMA;
+    }
+    Result.push_back(ExtKey);
+  }
+
+  return Result;
+}
+
+std::vector<unsigned long long>
+getIMACompatibleExtensionKey(ArrayRef<StringRef> Exts) {
+  std::vector<unsigned long long> Result;
+
+  for (auto Ext : Exts) {
+    unsigned long long ExtKey = 0;
+    if (Ext.starts_with("f") || Ext.starts_with("d"))
+      ExtKey = RISCV_HWPROBE_IMA_FD;
+    if (Ext.starts_with("c"))
+      ExtKey = RISCV_HWPROBE_IMA_C;
+    if (Ext.starts_with("v"))
+      ExtKey = RISCV_HWPROBE_IMA_V;
+    if (Ext.starts_with("zba"))
+      ExtKey = RISCV_HWPROBE_EXT_ZBA;
+    if (Ext.starts_with("zbb"))
+      ExtKey = RISCV_HWPROBE_EXT_ZBB;
+    if (Ext.starts_with("zbs"))
+      ExtKey = RISCV_HWPROBE_EXT_ZBS;
+    if (Ext.starts_with("zicboz"))
+      ExtKey = RISCV_HWPROBE_EXT_ZICBOZ;
+    if (Ext.starts_with("zbc"))
+      ExtKey = RISCV_HWPROBE_EXT_ZBC;
+    if (Ext.starts_with("zbkb"))
+      ExtKey = RISCV_HWPROBE_EXT_ZBKB;
+    if (Ext.starts_with("zbkc"))
+      ExtKey = RISCV_HWPROBE_EXT_ZBKC;
+    if (Ext.starts_with("zbkk"))
+      ExtKey = RISCV_HWPROBE_EXT_ZBKX;
+    if (Ext.starts_with("zknd"))
+      ExtKey = RISCV_HWPROBE_EXT_ZKND;
+    if (Ext.starts_with("zkne"))
+      ExtKey = RISCV_HWPROBE_EXT_ZKNE;
+    if (Ext.starts_with("zknh"))
+      ExtKey = RISCV_HWPROBE_EXT_ZKNH;
+    if (Ext.starts_with("zksed"))
+      ExtKey = RISCV_HWPROBE_EXT_ZKSED;
+    if (Ext.starts_with("zksh"))
+      ExtKey = RISCV_HWPROBE_EXT_ZKSH;
+    if (Ext.starts_with("zkt"))
+      ExtKey = RISCV_HWPROBE_EXT_ZKT;
+    if (Ext.starts_with("zvbb"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVBB;
+    if (Ext.starts_with("zvbc"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVBC;
+    if (Ext.starts_with("zvkb"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVKB;
+    if (Ext.starts_with("zvkg"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVKG;
+    if (Ext.starts_with("zvkned"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVKNED;
+    if (Ext.starts_with("zvknha"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVKNHA;
+    if (Ext.starts_with("zvknhb"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVKNHB;
+    if (Ext.starts_with("zvksed"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVKSED;
+    if (Ext.starts_with("zvksh"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVKSH;
+    if (Ext.starts_with("zvkt"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVKT;
+    if (Ext.starts_with("zfh"))
+      ExtKey = RISCV_HWPROBE_EXT_ZFH;
+    if (Ext.starts_with("zfhmin"))
+      ExtKey = RISCV_HWPROBE_EXT_ZFHMIN;
+    if (Ext.starts_with("zihintntl"))
+      ExtKey = RISCV_HWPROBE_EXT_ZIHINTNTL;
+    if (Ext.starts_with("zvfh"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVFH;
+    if (Ext.starts_with("zvfhmin"))
+      ExtKey = RISCV_HWPROBE_EXT_ZVFHMIN;
+    if (Ext.starts_with("zfa"))
+      ExtKey = RISCV_HWPROBE_EXT_ZFA;
+    if (Ext.starts_with("ztso"))
+      ExtKey = RISCV_HWPROBE_EXT_ZTSO;
+    if (Ext.starts_with("zacas"))
+      ExtKey = RISCV_HWPROBE_EXT_ZACAS;
+    if (Ext.starts_with("zicond"))
+      ExtKey = RISCV_HWPROBE_EXT_ZICOND;
+
+    Result.push_back(ExtKey);
+  }
+
+  return Result;
+}
+
+llvm::SmallVector<std::string> getImpliedExts(StringRef Ext) {
+  return RISCVISAInfo::getImpliedExts(Ext);
+}
+
 } // namespace RISCV
 
 namespace RISCVVType {

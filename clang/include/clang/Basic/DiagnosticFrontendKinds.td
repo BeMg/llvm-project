@@ -360,4 +360,10 @@ def warn_profile_data_misexpect : Warning<
 def err_extract_api_ignores_file_not_found :
   Error<"file '%0' specified by '--extract-api-ignores=' not found">, DefaultFatal;
 
+def err_extension_unsupport_riscv_hwprobe : Error<
+  "Unsupported extension '%0' for _riscv_hwprobe">;
+
+def err_os_unsupport_riscv_target_clones : Error<
+  "target_clones is currently only supported on Linux">;
+
 }

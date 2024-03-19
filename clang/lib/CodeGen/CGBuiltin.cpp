@@ -60,6 +60,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/TargetParser/AArch64TargetParser.h"
+#include "llvm/TargetParser/RISCVTargetParser.h"
 #include "llvm/TargetParser/X86TargetParser.h"
 #include <optional>
 #include <sstream>
@@ -14154,6 +14155,83 @@ CodeGenFunction::EmitAArch64CpuSupports(ArrayRef<StringRef> FeaturesStrs) {
     Result = Builder.CreateAnd(Result, Cmp);
   }
   return Result;
+}
+
+llvm::SmallVector<llvm::Value *>
+CodeGenFunction::EmitRISCVExtSupports(ArrayRef<StringRef> FeaturesStrs) {
+  auto BaseExtReqs = llvm::RISCV::getBaseExtensionKey(FeaturesStrs);
+  auto IMACompatibleExtReqs =
+      llvm::RISCV::getIMACompatibleExtensionKey(FeaturesStrs);
+
+  // Check whether all FeatureStrs are available for hwprobe.
+  llvm::SmallVector<StringRef> UnsupportByHwprobe;
+  llvm::SmallVector<std::string> SupportByHwprobe;
+  for (unsigned Idx = 0; Idx < FeaturesStrs.size(); Idx++) {
+    if (BaseExtReqs[Idx] == 0 && IMACompatibleExtReqs[Idx] == 0)
+      UnsupportByHwprobe.push_back(FeaturesStrs[Idx]);
+    else
+      SupportByHwprobe.push_back(FeaturesStrs[Idx].str());
+  }
+
+  // Repeatly find ImpliedExts until no longer find new.
+  llvm::SmallVector<std::string> ImpliedExts;
+
+  while (!SupportByHwprobe.empty()) {
+    std::string Ext = SupportByHwprobe.pop_back_val();
+    if (llvm::is_contained(ImpliedExts, Ext))
+      continue;
+    ImpliedExts.push_back(Ext);
+    for (auto ImpliedExt : llvm::RISCV::getImpliedExts(Ext))
+      SupportByHwprobe.push_back(ImpliedExt);
+  }
+
+  // FIXME: Could hwprobe guarantee that the hardware will support the Implied
+  // extension?
+  for (unsigned Idx = 0; Idx < UnsupportByHwprobe.size(); Idx++) {
+    if (!llvm::is_contained(ImpliedExts, UnsupportByHwprobe[Idx]))
+      CGM.getDiags().Report(diag::err_extension_unsupport_riscv_hwprobe)
+          << UnsupportByHwprobe[Idx];
+  }
+
+  StructType *StructType =
+      StructType::create({llvm::Type::getInt64Ty(CGM.getLLVMContext()),
+                          llvm::Type::getInt64Ty(CGM.getLLVMContext())},
+                         "riscv_hwprobe_pair");
+
+  auto *ATy =
+      llvm::ArrayType::get(StructType, llvm::RISCV::RISCVHwprobeLengthOfKey);
+
+  auto createConstant = [&](unsigned long long Value) -> Constant * {
+    return ConstantInt::get(llvm::Type::getInt64Ty(CGM.getLLVMContext()),
+                            Value);
+  };
+
+  auto createHwprobeVal = [&](const std::vector<unsigned long long> &ExtReqs)
+      -> unsigned long long {
+    unsigned long long CurrVal = 0;
+    for (auto ExtReq : ExtReqs) {
+      if (ExtReq == 0)
+        continue;
+      CurrVal |= ExtReq;
+    }
+    return CurrVal;
+  };
+
+  SmallVector<Constant *> KeyValPairs;
+  KeyValPairs.push_back(ConstantStruct::get(
+      StructType, {createConstant(llvm::RISCV::RISCVHwprobeKeyBase),
+                   createConstant(createHwprobeVal(BaseExtReqs))}));
+  KeyValPairs.push_back(ConstantStruct::get(
+      StructType, {createConstant(llvm::RISCV::RISCVHwprobeKeyIMA),
+                   createConstant(createHwprobeVal(IMACompatibleExtReqs))}));
+
+  GlobalVariable *KeyValuePairs = new GlobalVariable(
+      CGM.getModule(), ATy, false, GlobalValue::InternalLinkage,
+      ConstantArray::get(ATy, KeyValPairs), "__riscv_hwprobe_args");
+
+  llvm::SmallVector<llvm::Value *> Vals = {
+      KeyValuePairs, Builder.getInt32(llvm::RISCV::RISCVHwprobeLengthOfKey)};
+  return Vals;
 }
 
 Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
