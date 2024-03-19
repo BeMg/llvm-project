@@ -5247,6 +5247,9 @@ public:
   void
   EmitAArch64MultiVersionResolver(llvm::Function *Resolver,
                                   ArrayRef<MultiVersionResolverOption> Options);
+  void
+  EmitRISCVMultiVersionResolver(llvm::Function *Resolver,
+                                ArrayRef<MultiVersionResolverOption> Options);
 
 private:
   QualType getVarArgType(const Expr *Arg);
@@ -5271,6 +5274,8 @@ private:
   FormAArch64ResolverCondition(const MultiVersionResolverOption &RO);
   llvm::Value *EmitAArch64CpuSupports(const CallExpr *E);
   llvm::Value *EmitAArch64CpuSupports(ArrayRef<StringRef> FeatureStrs);
+  llvm::Value *EmitRISCVCpuInit();
+  llvm::Value *EmitRISCVCpuSupports(ArrayRef<StringRef> FeatureStrs);
 };
 
 inline DominatingLLVMValue::saved_type

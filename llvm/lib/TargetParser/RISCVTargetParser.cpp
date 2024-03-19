@@ -119,6 +119,36 @@ void getFeaturesForCPU(StringRef CPU,
     else
       EnabledFeatures.push_back(F.substr(1));
 }
+
+namespace RISCVExtensionBitmaskTable {
+#define GET_RISCVExtensionBitmaskTable_IMPL
+#include "llvm/TargetParser/RISCVTargetParserDef.inc"
+
+} // namespace RISCVExtensionBitmaskTable
+
+static RISCVExtensionBitmaskTable::RISCVExtensionBitmask
+getExtensionBitmask(StringRef Name) {
+  for (auto Tmp : RISCVExtensionBitmaskTable::ExtensionBitmask) {
+    if (Tmp.Name == Name)
+      return Tmp;
+  }
+  return RISCVExtensionBitmaskTable::RISCVExtensionBitmask();
+}
+
+llvm::SmallVector<unsigned long long>
+getRequireFeatureBitMask(ArrayRef<StringRef> Exts) {
+  llvm::SmallVector<unsigned long long> BitMasks = {0, 0};
+
+  for (auto Ext : Exts) {
+    RISCVExtensionBitmaskTable::RISCVExtensionBitmask ExtBitmask =
+        getExtensionBitmask(Ext);
+    assert(ExtBitmask.Bitmask != 0 && "This extension doesn't has bitmask.");
+    BitMasks[ExtBitmask.GroupID] |= ExtBitmask.Bitmask;
+  }
+
+  return BitMasks;
+}
+
 } // namespace RISCV
 
 namespace RISCVVType {

@@ -62,6 +62,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/TargetParser/AArch64TargetParser.h"
+#include "llvm/TargetParser/RISCVTargetParser.h"
 #include "llvm/TargetParser/X86TargetParser.h"
 #include <optional>
 #include <sstream>
@@ -14155,6 +14156,16 @@ Value *CodeGenFunction::EmitAArch64CpuInit() {
   return Builder.CreateCall(Func);
 }
 
+Value *CodeGenFunction::EmitRISCVCpuInit() {
+  llvm::FunctionType *FTy = llvm::FunctionType::get(VoidTy, false);
+  llvm::FunctionCallee Func =
+      CGM.CreateRuntimeFunction(FTy, "__init_riscv_features_bit");
+  cast<llvm::GlobalValue>(Func.getCallee())->setDSOLocal(true);
+  cast<llvm::GlobalValue>(Func.getCallee())
+      ->setDLLStorageClass(llvm::GlobalValue::DefaultStorageClass);
+  return Builder.CreateCall(Func);
+}
+
 Value *CodeGenFunction::EmitX86CpuInit() {
   llvm::FunctionType *FTy = llvm::FunctionType::get(VoidTy,
                                                     /*Variadic*/ false);
@@ -14204,6 +14215,48 @@ CodeGenFunction::EmitAArch64CpuSupports(ArrayRef<StringRef> FeaturesStrs) {
     Value *Cmp = Builder.CreateICmpEQ(Bitset, Mask);
     Result = Builder.CreateAnd(Result, Cmp);
   }
+  return Result;
+}
+
+llvm::Value *
+CodeGenFunction::EmitRISCVCpuSupports(ArrayRef<StringRef> FeaturesStrs) {
+
+  llvm::ArrayType *Array6xInt64Ty = llvm::ArrayType::get(Int64Ty, 6);
+  llvm::Type *STy = llvm::StructType::get(Array6xInt64Ty);
+  llvm::Constant *RISCVFeaturesBits =
+      CGM.CreateRuntimeVariable(STy, "__riscv_feature_bits");
+  cast<llvm::GlobalValue>(RISCVFeaturesBits)->setDSOLocal(true);
+
+  auto LoadFeatureBit = [&](unsigned Index) {
+    // Create GEP then load.
+    llvm::Value *IndexVal = llvm::ConstantInt::get(Int32Ty, Index);
+    std::vector<llvm::Value *> GEPIndices = {llvm::ConstantInt::get(Int32Ty, 0),
+                                             llvm::ConstantInt::get(Int32Ty, 0),
+                                             IndexVal};
+    llvm::Value *SecondElementPtr =
+        Builder.CreateInBoundsGEP(STy, RISCVFeaturesBits, GEPIndices);
+    Value *FeaturesBit = Builder.CreateAlignedLoad(Int64Ty, SecondElementPtr,
+                                                   CharUnits::fromQuantity(8));
+    return FeaturesBit;
+  };
+
+  SmallVector<llvm::Value *> FeatureBits;
+  FeatureBits.push_back(LoadFeatureBit(0));
+  FeatureBits.push_back(LoadFeatureBit(1));
+
+  SmallVector<unsigned long long> RequireFeatureBits =
+      llvm::RISCV::getRequireFeatureBitMask(FeaturesStrs);
+
+  Value *Result = Builder.getTrue();
+  for (unsigned i = 0; i < FeatureBits.size(); i++) {
+    if (!RequireFeatureBits[i])
+      continue;
+    Value *Mask = Builder.getInt64(RequireFeatureBits[i]);
+    Value *Bitset = Builder.CreateAnd(FeatureBits[i], Mask);
+    Value *Cmp = Builder.CreateICmpEQ(Bitset, Mask);
+    Result = Builder.CreateAnd(Result, Cmp);
+  }
+
   return Result;
 }
 

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 include "llvm/Target/Target.td"
+include "llvm/TableGen/SearchableTable.td"
 
 //===----------------------------------------------------------------------===//
 // RISC-V subtarget features and instruction predicates.
