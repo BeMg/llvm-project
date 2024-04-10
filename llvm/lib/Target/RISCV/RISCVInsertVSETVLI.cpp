@@ -27,16 +27,19 @@
 #include "RISCV.h"
 #include "RISCVSubtarget.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/LiveDebugVariables.h"
 #include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/LiveStacks.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include <queue>
 using namespace llvm;
 
 #define DEBUG_TYPE "riscv-insert-vsetvli"
 #define RISCV_INSERT_VSETVLI_NAME "RISC-V Insert VSETVLI pass"
+#define RISCV_COALESCE_VSETVLI_NAME "RISC-V Coalesce VSETVLI pass"
 
 STATISTIC(NumInsertedVSETVL, "Number of VSETVL inst inserted");
-STATISTIC(NumRemovedVSETVL, "Number of VSETVL inst removed");
+STATISTIC(NumCoalescedVSETVL, "Number of VSETVL inst coalesced");
 
 static cl::opt<bool> DisableInsertVSETVLPHIOpt(
     "riscv-disable-insert-vsetvl-phi-opt", cl::init(false), cl::Hidden,
@@ -189,6 +192,11 @@ static bool hasUndefinedMergeOp(const MachineInstr &MI,
   const MachineOperand &UseMO = MI.getOperand(UseOpIdx);
   if (UseMO.getReg() == RISCV::NoRegister)
     return true;
+
+  if (UseMO.isUndef())
+    return true;
+  if (UseMO.getReg().isPhysical())
+    return false;
 
   if (MachineInstr *UseMI = MRI.getVRegDef(UseMO.getReg())) {
     if (UseMI->isImplicitDef())
@@ -777,9 +785,31 @@ private:
                              VSETVLIInfo &Info) const;
   void computeIncomingVLVTYPE(const MachineBasicBlock &MBB);
   void emitVSETVLIs(MachineBasicBlock &MBB);
-  void doLocalPostpass(MachineBasicBlock &MBB);
   void doPRE(MachineBasicBlock &MBB);
   void insertReadVL(MachineBasicBlock &MBB);
+};
+
+class RISCVCoalesceVSETVLI : public MachineFunctionPass {
+public:
+  static char ID;
+
+  RISCVCoalesceVSETVLI() : MachineFunctionPass(ID) {}
+  bool runOnMachineFunction(MachineFunction &MF) override;
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.setPreservesCFG();
+
+    AU.addRequired<LiveIntervals>();
+    AU.addPreserved<LiveIntervals>();
+    AU.addRequired<SlotIndexes>();
+    AU.addPreserved<SlotIndexes>();
+    AU.addPreserved<LiveDebugVariables>();
+    AU.addPreserved<LiveStacks>();
+
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+
+  StringRef getPassName() const override { return RISCV_COALESCE_VSETVLI_NAME; }
 };
 
 } // end anonymous namespace
@@ -788,6 +818,11 @@ char RISCVInsertVSETVLI::ID = 0;
 
 INITIALIZE_PASS(RISCVInsertVSETVLI, DEBUG_TYPE, RISCV_INSERT_VSETVLI_NAME,
                 false, false)
+
+char RISCVCoalesceVSETVLI::ID = 0;
+
+INITIALIZE_PASS(RISCVCoalesceVSETVLI, "riscv-coalesce-vsetvli",
+                RISCV_COALESCE_VSETVLI_NAME, false, false)
 
 // Return a VSETVLIInfo representing the changes made by this VSETVLI or
 // VSETIVLI instruction.
@@ -1510,7 +1545,10 @@ static bool canMutatePriorConfig(const MachineInstr &PrevMI,
 
     auto &AVL = MI.getOperand(1);
     auto &PrevAVL = PrevMI.getOperand(1);
-    assert(MRI.isSSA());
+    assert(!AVL.isReg() || !AVL.getReg().isVirtual() ||
+           MRI.hasOneDef(AVL.getReg()));
+    assert(!PrevAVL.isReg() || !PrevAVL.getReg().isVirtual() ||
+           MRI.hasOneDef(PrevAVL.getReg()));
 
     // If the AVL is a register, we need to make sure MI's AVL dominates PrevMI.
     // For now just check that PrevMI uses the same virtual register.
@@ -1528,64 +1566,6 @@ static bool canMutatePriorConfig(const MachineInstr &PrevMI,
   auto PriorVType = PrevMI.getOperand(2).getImm();
   auto VType = MI.getOperand(2).getImm();
   return areCompatibleVTYPEs(PriorVType, VType, Used);
-}
-
-void RISCVInsertVSETVLI::doLocalPostpass(MachineBasicBlock &MBB) {
-  MachineInstr *NextMI = nullptr;
-  // We can have arbitrary code in successors, so VL and VTYPE
-  // must be considered demanded.
-  DemandedFields Used;
-  Used.demandVL();
-  Used.demandVTYPE();
-  SmallVector<MachineInstr*> ToDelete;
-  for (MachineInstr &MI : make_range(MBB.rbegin(), MBB.rend())) {
-
-    if (!isVectorConfigInstr(MI)) {
-      doUnion(Used, getDemanded(MI, MRI, ST));
-      continue;
-    }
-
-    Register VRegDef = MI.getOperand(0).getReg();
-    if (VRegDef != RISCV::X0 &&
-        !(VRegDef.isVirtual() && MRI->use_nodbg_empty(VRegDef)))
-      Used.demandVL();
-
-    if (NextMI) {
-      if (!Used.usedVL() && !Used.usedVTYPE()) {
-        ToDelete.push_back(&MI);
-        // Leave NextMI unchanged
-        continue;
-      } else if (canMutatePriorConfig(MI, *NextMI, Used, *MRI)) {
-        if (!isVLPreservingConfig(*NextMI)) {
-          MI.getOperand(0).setReg(NextMI->getOperand(0).getReg());
-          MI.getOperand(0).setIsDead(false);
-          Register OldVLReg;
-          if (MI.getOperand(1).isReg())
-            OldVLReg = MI.getOperand(1).getReg();
-          if (NextMI->getOperand(1).isImm())
-            MI.getOperand(1).ChangeToImmediate(NextMI->getOperand(1).getImm());
-          else
-            MI.getOperand(1).ChangeToRegister(NextMI->getOperand(1).getReg(), false);
-          if (OldVLReg) {
-            MachineInstr *VLOpDef = MRI->getUniqueVRegDef(OldVLReg);
-            if (VLOpDef && TII->isAddImmediate(*VLOpDef, OldVLReg) &&
-                MRI->use_nodbg_empty(OldVLReg))
-              VLOpDef->eraseFromParent();
-          }
-          MI.setDesc(NextMI->getDesc());
-        }
-        MI.getOperand(2).setImm(NextMI->getOperand(2).getImm());
-        ToDelete.push_back(NextMI);
-        // fallthrough
-      }
-    }
-    NextMI = &MI;
-    Used = getDemanded(MI, MRI, ST);
-  }
-
-  NumRemovedVSETVL += ToDelete.size();
-  for (auto *MI : ToDelete)
-    MI->eraseFromParent();
 }
 
 void RISCVInsertVSETVLI::insertReadVL(MachineBasicBlock &MBB) {
@@ -1660,15 +1640,6 @@ bool RISCVInsertVSETVLI::runOnMachineFunction(MachineFunction &MF) {
   for (MachineBasicBlock &MBB : MF)
     emitVSETVLIs(MBB);
 
-  // Now that all vsetvlis are explicit, go through and do block local
-  // DSE and peephole based demanded fields based transforms.  Note that
-  // this *must* be done outside the main dataflow so long as we allow
-  // any cross block analysis within the dataflow.  We can't have both
-  // demanded fields based mutation and non-local analysis in the
-  // dataflow at the same time without introducing inconsistencies.
-  for (MachineBasicBlock &MBB : MF)
-    doLocalPostpass(MBB);
-
   // Insert PseudoReadVL after VLEFF/VLSEGFF and replace it with the vl output
   // of VLEFF/VLSEGFF.
   for (MachineBasicBlock &MBB : MF)
@@ -1681,4 +1652,122 @@ bool RISCVInsertVSETVLI::runOnMachineFunction(MachineFunction &MF) {
 /// Returns an instance of the Insert VSETVLI pass.
 FunctionPass *llvm::createRISCVInsertVSETVLIPass() {
   return new RISCVInsertVSETVLI();
+}
+
+// Now that all vsetvlis are explicit, go through and do block local
+// DSE and peephole based demanded fields based transforms.  Note that
+// this *must* be done outside the main dataflow so long as we allow
+// any cross block analysis within the dataflow.  We can't have both
+// demanded fields based mutation and non-local analysis in the
+// dataflow at the same time without introducing inconsistencies.
+bool RISCVCoalesceVSETVLI::runOnMachineFunction(MachineFunction &MF) {
+  // Skip if the vector extension is not enabled.
+  auto *ST = &MF.getSubtarget<RISCVSubtarget>();
+  if (!ST->hasVInstructions())
+    return false;
+
+  LiveIntervals &LIS = getAnalysis<LiveIntervals>();
+
+  bool Changed = false;
+
+  const auto *TII = ST->getInstrInfo();
+  auto *MRI = &MF.getRegInfo();
+  for (MachineBasicBlock &MBB : MF) {
+    MachineInstr *NextMI = nullptr;
+    // We can have arbitrary code in successors, so VL and VTYPE
+    // must be considered demanded.
+    DemandedFields Used;
+    Used.demandVL();
+    Used.demandVTYPE();
+    SmallVector<MachineInstr *> ToDelete;
+    for (MachineInstr &MI : make_range(MBB.rbegin(), MBB.rend())) {
+
+      if (!isVectorConfigInstr(MI)) {
+        doUnion(Used, getDemanded(MI, MRI, ST));
+        continue;
+      }
+
+      Register VRegDef = MI.getOperand(0).getReg();
+      if (VRegDef != RISCV::X0 &&
+          !(VRegDef.isVirtual() && MRI->use_nodbg_empty(VRegDef)))
+        Used.demandVL();
+
+      if (NextMI) {
+        if (!Used.usedVL() && !Used.usedVTYPE()) {
+          ToDelete.push_back(&MI);
+          // Leave NextMI unchanged
+          continue;
+        } else if (canMutatePriorConfig(MI, *NextMI, Used, *MRI)) {
+          if (!isVLPreservingConfig(*NextMI)) {
+
+            Register DefReg = NextMI->getOperand(0).getReg();
+
+            MI.getOperand(0).setReg(DefReg);
+            MI.getOperand(0).setIsDead(false);
+
+            // The def of DefReg moved to MI, so extend the LiveInterval up to
+            // it.
+            if (DefReg.isVirtual()) {
+              LiveInterval &DefLI = LIS.getInterval(DefReg);
+              SlotIndex MISlot = LIS.getInstructionIndex(MI).getRegSlot();
+              VNInfo *DefVNI = DefLI.getVNInfoAt(DefLI.beginIndex());
+              LiveInterval::Segment S(MISlot, DefLI.beginIndex(), DefVNI);
+              DefLI.addSegment(S);
+              DefVNI->def = MISlot;
+
+              // DefReg may have had no uses, in which case we need to shrink
+              // the LiveInterval up to MI.
+              LIS.shrinkToUses(&DefLI);
+            }
+
+            Register OldVLReg;
+            if (MI.getOperand(1).isReg())
+              OldVLReg = MI.getOperand(1).getReg();
+            if (NextMI->getOperand(1).isImm())
+              MI.getOperand(1).ChangeToImmediate(
+                  NextMI->getOperand(1).getImm());
+            else
+              MI.getOperand(1).ChangeToRegister(NextMI->getOperand(1).getReg(),
+                                                false);
+
+            // Clear NextMI's AVL early so we're not counting it as a use.
+            if (NextMI->getOperand(1).isReg())
+              NextMI->getOperand(1).setReg(RISCV::NoRegister);
+
+            if (OldVLReg) {
+              MachineInstr *VLOpDef = MRI->getUniqueVRegDef(OldVLReg);
+              if (VLOpDef && TII->isAddImmediate(*VLOpDef, OldVLReg) &&
+                  MRI->use_nodbg_empty(OldVLReg)) {
+                VLOpDef->eraseFromParent();
+              }
+
+              // NextMI no longer uses OldVLReg so shrink its LiveInterval.
+              if (OldVLReg.isVirtual())
+                LIS.shrinkToUses(&LIS.getInterval(OldVLReg));
+            }
+
+            MI.setDesc(NextMI->getDesc());
+          }
+          MI.getOperand(2).setImm(NextMI->getOperand(2).getImm());
+          ToDelete.push_back(NextMI);
+          // fallthrough
+        }
+      }
+      NextMI = &MI;
+      Used = getDemanded(MI, MRI, ST);
+    }
+
+    Changed |= !ToDelete.empty();
+    NumCoalescedVSETVL += ToDelete.size();
+    for (auto *MI : ToDelete) {
+      LIS.RemoveMachineInstrFromMaps(*MI);
+      MI->eraseFromParent();
+    }
+  }
+
+  return Changed;
+}
+
+FunctionPass *llvm::createRISCVCoalesceVSETVLIPass() {
+  return new RISCVCoalesceVSETVLI();
 }
