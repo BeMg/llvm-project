@@ -14,6 +14,7 @@
 #include "MCTargetDesc/RISCVBaseInfo.h"
 #include "RISCV.h"
 #include "RISCVMachineFunctionInfo.h"
+#include "RISCVMachineScheduler.h"
 #include "RISCVTargetObjectFile.h"
 #include "RISCVTargetTransformInfo.h"
 #include "TargetInfo/RISCVTargetInfo.h"
@@ -100,6 +101,11 @@ static cl::opt<bool> EnableVSETVLIAfterRVVRegAlloc(
     "riscv-vsetvl-after-rvv-regalloc", cl::Hidden,
     cl::desc("Insert vsetvls after vector register allocation"),
     cl::init(true));
+
+static cl::opt<bool>
+    EnableVSETVLIAwareSche("riscv-vsetvli-aware-sched", cl::Hidden,
+                           cl::desc("RISC-V vsetvl aware scheduler"),
+                           cl::init(false));
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   RegisterTargetMachine<RISCVTargetMachine> X(getTheRISCV32Target());
@@ -341,8 +347,13 @@ public:
   ScheduleDAGInstrs *
   createMachineScheduler(MachineSchedContext *C) const override {
     ScheduleDAGMILive *DAG = nullptr;
+    if (EnableVSETVLIAwareSche) {
+      DAG = new ScheduleDAGMILive(C, std::make_unique<RISCVSchedStrategy>(C));
+      DAG->addMutation(createCopyConstrainDAGMutation(DAG->TII, DAG->TRI));
+    }
+
     if (EnableMISchedLoadClustering) {
-      DAG = createGenericSchedLive(C);
+      DAG = DAG ? DAG : createGenericSchedLive(C);
       DAG->addMutation(createLoadClusterDAGMutation(
           DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
     }
