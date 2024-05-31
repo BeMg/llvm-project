@@ -14251,6 +14251,7 @@ CodeGenFunction::EmitRISCVCpuSupports(ArrayRef<StringRef> FeaturesStrs) {
   for (unsigned i = 0; i < FeatureBits.size(); i++) {
     if (!RequireFeatureBits[i])
       continue;
+    // FIXME: Something wrong here
     Value *Mask = Builder.getInt64(RequireFeatureBits[i]);
     Value *Bitset = Builder.CreateAnd(FeatureBits[i], Mask);
     Value *Cmp = Builder.CreateICmpEQ(Bitset, Mask);
