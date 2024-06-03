@@ -14221,8 +14221,8 @@ CodeGenFunction::EmitAArch64CpuSupports(ArrayRef<StringRef> FeaturesStrs) {
 llvm::Value *
 CodeGenFunction::EmitRISCVCpuSupports(ArrayRef<StringRef> FeaturesStrs) {
 
-  llvm::ArrayType *Array6xInt64Ty = llvm::ArrayType::get(Int64Ty, 6);
-  llvm::Type *STy = llvm::StructType::get(Array6xInt64Ty);
+  llvm::ArrayType *Array2xInt64Ty = llvm::ArrayType::get(Int64Ty, 2);
+  llvm::Type *STy = llvm::StructType::get(Int32Ty, Array2xInt64Ty);
   llvm::Constant *RISCVFeaturesBits =
       CGM.CreateRuntimeVariable(STy, "__riscv_feature_bits");
   cast<llvm::GlobalValue>(RISCVFeaturesBits)->setDSOLocal(true);
@@ -14231,7 +14231,7 @@ CodeGenFunction::EmitRISCVCpuSupports(ArrayRef<StringRef> FeaturesStrs) {
     // Create GEP then load.
     llvm::Value *IndexVal = llvm::ConstantInt::get(Int32Ty, Index);
     std::vector<llvm::Value *> GEPIndices = {llvm::ConstantInt::get(Int32Ty, 0),
-                                             llvm::ConstantInt::get(Int32Ty, 0),
+                                             llvm::ConstantInt::get(Int32Ty, 1),
                                              IndexVal};
     llvm::Value *SecondElementPtr =
         Builder.CreateInBoundsGEP(STy, RISCVFeaturesBits, GEPIndices);
