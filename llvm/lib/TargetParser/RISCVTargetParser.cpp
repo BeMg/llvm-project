@@ -126,12 +126,25 @@ namespace RISCVExtensionBitmaskTable {
 
 } // namespace RISCVExtensionBitmaskTable
 
+namespace {
+struct LessExtName {
+  bool operator()(const RISCVExtensionBitmaskTable::RISCVExtensionBitmask &LHS, StringRef RHS) {
+    return StringRef(LHS.Name) < RHS;
+  }
+  bool operator()(StringRef LHS, const RISCVExtensionBitmaskTable::RISCVExtensionBitmask &RHS) {
+    return LHS < StringRef(RHS.Name);
+  }
+};
+} // namespace
+
 static RISCVExtensionBitmaskTable::RISCVExtensionBitmask
 getExtensionBitmask(StringRef Name) {
-  for (auto Tmp : RISCVExtensionBitmaskTable::ExtensionBitmask) {
-    if (Tmp.Name == Name)
-      return Tmp;
-  }
+  ArrayRef<RISCVExtensionBitmaskTable::RISCVExtensionBitmask> ExtInfo = ArrayRef(RISCVExtensionBitmaskTable::ExtensionBitmask);
+  auto I = llvm::lower_bound(ExtInfo, Name, LessExtName());
+
+  if (I != ExtInfo.end())
+    return *I;
+
   return RISCVExtensionBitmaskTable::RISCVExtensionBitmask();
 }
 
