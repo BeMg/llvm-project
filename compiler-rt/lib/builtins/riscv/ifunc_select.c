@@ -101,6 +101,12 @@ struct {
   unsigned long long features[2];
 } __riscv_feature_bits __attribute__((visibility("hidden"), nocommon));
 
+struct {
+  unsigned venderID;
+  unsigned length;
+  unsigned long long features[1];
+} __riscv_vender_feature_bits __attribute__((visibility("hidden"), nocommon));
+
 // NOTE: Should sync-up with RISCVFeatures.td
 // TODO: Maybe generate a header from tablegen then include it.
 #define A_GROUPID 0
@@ -322,6 +328,10 @@ struct {
 #define HWPROBE_LENGTH 2
 
 static void initRISCVFeature(struct riscv_hwprobe Hwprobes[]) {
+  // Init vender extension
+  __riscv_vender_feature_bits.length = 0;
+
+  // Init standard extension
   __riscv_feature_bits.length = 2;
   // Check RISCV_HWPROBE_KEY_BASE_BEHAVIOR
   if (Hwprobes[0].value & RISCV_HWPROBE_BASE_BEHAVIOR_IMA) {
@@ -449,9 +459,15 @@ static void initRISCVFeature(struct riscv_hwprobe Hwprobes[]) {
   }
 }
 
+static int FeaturesBitCached = 0;
+
 void __init_riscv_features_bit() {
 
-  // TODO: Cache the result, then we could only run once.
+  if (FeaturesBitCached)
+    return;
+
+  FeaturesBitCached = 1;
+
   struct riscv_hwprobe Hwprobes[HWPROBE_LENGTH];
   Hwprobes[0].key = RISCV_HWPROBE_KEY_BASE_BEHAVIOR;
   Hwprobes[1].key = RISCV_HWPROBE_KEY_IMA_EXT_0;
