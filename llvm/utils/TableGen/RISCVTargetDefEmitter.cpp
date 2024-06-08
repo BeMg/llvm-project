@@ -226,7 +226,7 @@ static inline uint64_t getValueFromBitsInit(const BitsInit *B,
 static unsigned countBitPos(uint64_t Val) {
   unsigned Pos = 0;
 
-  while (Val > 0) {
+  while (Val > 1) {
     Pos += 1;
     Val /= 2;
   }
