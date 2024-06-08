@@ -223,6 +223,17 @@ static inline uint64_t getValueFromBitsInit(const BitsInit *B,
   return Value;
 }
 
+static unsigned countBitPos(uint64_t Val) {
+  unsigned Pos = 0;
+
+  while (Val > 0) {
+    Pos += 1;
+    Val /= 2;
+  }
+
+  return Pos;
+}
+
 static void emitRISCVExtensionBitmask(RecordKeeper &RK, raw_ostream &OS) {
 
   std::vector<Record *> Extensions =
@@ -245,6 +256,19 @@ static void emitRISCVExtensionBitmask(RecordKeeper &RK, raw_ostream &OS) {
        << getValueFromBitsInit(BitmaskBits, *Rec) << "ULL" << "},\n";
   }
   OS << "};\n";
+  OS << "#endif\n";
+
+  OS << "#ifdef GET_RISCVExtensionBitmaskMarco_DECL\n";
+  for (const Record *Rec : Extensions) {
+    BitsInit *GroupIDBits = Rec->getValueAsBitsInit("GroupID");
+    BitsInit *BitmaskBits = Rec->getValueAsBitsInit("Bitmask");
+
+    OS << "#define " << Rec->getValueAsString("Name").upper() << "_GROUPID "
+       << getValueFromBitsInit(GroupIDBits, *Rec) << "\n";
+    OS << "#define " << Rec->getValueAsString("Name").upper() << "_BITMASK "
+       << "(1ULL << " << countBitPos(getValueFromBitsInit(BitmaskBits, *Rec))
+       << ")" << "\n";
+  }
   OS << "#endif\n";
 }
 
