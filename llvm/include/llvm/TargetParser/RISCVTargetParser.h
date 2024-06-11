@@ -44,6 +44,8 @@ StringRef getMArchFromMcpu(StringRef CPU);
 void fillValidCPUArchList(SmallVectorImpl<StringRef> &Values, bool IsRV64);
 void fillValidTuneCPUArchList(SmallVectorImpl<StringRef> &Values, bool IsRV64);
 bool hasFastUnalignedAccess(StringRef CPU);
+llvm::SmallVector<unsigned long long>
+    getRequireFeatureBitMask(ArrayRef<StringRef>);
 
 } // namespace RISCV
 

@@ -151,6 +151,20 @@ getExtensionBitmask(StringRef ExtName) {
 
   return RISCVExtensionBitmaskTable::RISCVExtensionBitmask();
 }
+
+llvm::SmallVector<unsigned long long>
+getRequireFeatureBitMask(ArrayRef<StringRef> Exts) {
+  llvm::SmallVector<unsigned long long> BitMasks = {0, 0};
+
+  for (auto Ext : Exts) {
+    RISCVExtensionBitmaskTable::RISCVExtensionBitmask ExtBitmask =
+        getExtensionBitmask(Ext);
+    assert(ExtBitmask.Bitmask != 0 && "This extension doesn't has bitmask.");
+    BitMasks[ExtBitmask.GroupID] |= ExtBitmask.Bitmask;
+  }
+
+  return BitMasks;
+}
 } // namespace RISCV
 
 namespace RISCVVType {
