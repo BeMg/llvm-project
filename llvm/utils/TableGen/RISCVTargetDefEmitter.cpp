@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/RISCVISAUtils.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
@@ -234,6 +235,42 @@ static unsigned countBitPos(uint64_t Val) {
   return Pos;
 }
 
+static void
+getImpliedChain(const std::vector<Record *> &Extensions,
+                std::map<StringRef, DenseSet<StringRef>> &ImpliedChains) {
+  for (Record *Ext : Extensions) {
+    auto ImpliesList = Ext->getValueAsListOfDefs("Implies");
+    if (ImpliesList.empty())
+      continue;
+
+    StringRef Name = getExtensionName(Ext);
+
+    for (auto *ImpliedExt : ImpliesList) {
+      if (!ImpliedExt->isSubClassOf("RISCVExtension"))
+        continue;
+      ImpliedChains[Name].insert(getExtensionName(ImpliedExt));
+    }
+  }
+
+  bool Changed = true;
+  while (Changed) {
+    Changed = false;
+
+    for (auto I = ImpliedChains.begin(); I != ImpliedChains.end(); I++) {
+      DenseSet<StringRef> NewImpiledExts;
+      for (auto ImpliedExt : I->second) {
+        for (auto NewImpliedExt : ImpliedChains[ImpliedExt]) {
+          NewImpiledExts.insert(NewImpliedExt);
+        }
+      }
+      for (auto NewImpiledExt : NewImpiledExts) {
+        if (I->second.insert(NewImpiledExt).second)
+          Changed = true;
+      }
+    }
+  }
+}
+
 static void emitRISCVExtensionBitmask(RecordKeeper &RK, raw_ostream &OS) {
 
   std::vector<Record *> Extensions =
@@ -269,6 +306,27 @@ static void emitRISCVExtensionBitmask(RecordKeeper &RK, raw_ostream &OS) {
        << "(1ULL << " << countBitPos(getValueFromBitsInit(BitmaskBits, *Rec))
        << ")" << "\n";
   }
+  OS << "#endif\n";
+
+  std::vector<Record *> RISCVExtensions =
+      RK.getAllDerivedDefinitionsIfDefined("RISCVExtension");
+  llvm::sort(Extensions, [](const Record *Rec1, const Record *Rec2) {
+    return getExtensionName(Rec1) < getExtensionName(Rec2);
+  });
+
+  OS << "#ifdef GET_RISCVExtensionBitmaskMarco_IMPL\n";
+  std::map<StringRef, DenseSet<StringRef>> ImpliedChains;
+  getImpliedChain(RISCVExtensions, ImpliedChains);
+
+  for (auto Tmp : ImpliedChains) {
+    OS << Tmp.first << ": \n";
+    for (auto Tmp2 : Tmp.second) {
+      OS << "__riscv_feature_bits.features[" << Tmp2.upper() << "_GROUPID]"
+         << " |= " << Tmp2.upper() << "_BITMASK;" << "\n";
+    }
+    OS << "\n";
+  }
+
   OS << "#endif\n";
 }
 
