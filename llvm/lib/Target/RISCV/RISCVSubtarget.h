@@ -23,6 +23,7 @@
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Target/TargetMachine.h"
 #include <bitset>
@@ -306,6 +307,9 @@ public:
   unsigned getTailDupAggressiveThreshold() const {
     return TuneInfo->TailDupAggressiveThreshold;
   }
+    
+  void overrideSchedPolicy(MachineSchedPolicy &Policy,
+                          unsigned NumRegionInstrs) const override;
 };
 } // End llvm namespace
 

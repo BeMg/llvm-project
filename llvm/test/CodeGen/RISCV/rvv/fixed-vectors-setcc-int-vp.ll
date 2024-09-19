@@ -1263,9 +1263,9 @@ define <64 x i1> @icmp_eq_vv_v64i32(<64 x i32> %va, <64 x i32> %vb, <64 x i1> %m
 ; CHECK-NEXT:    vle32.v v24, (a0)
 ; CHECK-NEXT:    addi a0, sp, 16
 ; CHECK-NEXT:    vs8r.v v24, (a0) # Unknown-size Folded Spill
+; CHECK-NEXT:    mv a0, a2
 ; CHECK-NEXT:    vsetivli zero, 4, e8, mf2, ta, ma
 ; CHECK-NEXT:    vslidedown.vi v6, v0, 4
-; CHECK-NEXT:    mv a0, a2
 ; CHECK-NEXT:    bltu a2, a3, .LBB99_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    li a0, 32

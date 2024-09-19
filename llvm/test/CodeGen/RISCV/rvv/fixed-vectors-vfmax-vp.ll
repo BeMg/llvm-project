@@ -405,9 +405,9 @@ define <32 x double> @vfmax_vv_v32f64(<32 x double> %va, <32 x double> %vb, <32 
 ; CHECK-NEXT:    addi a0, sp, 16
 ; CHECK-NEXT:    vs8r.v v24, (a0) # Unknown-size Folded Spill
 ; CHECK-NEXT:    li a1, 16
+; CHECK-NEXT:    mv a0, a2
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf4, ta, ma
 ; CHECK-NEXT:    vslidedown.vi v7, v0, 2
-; CHECK-NEXT:    mv a0, a2
 ; CHECK-NEXT:    bltu a2, a1, .LBB26_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    li a0, 16

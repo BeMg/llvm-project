@@ -1078,9 +1078,9 @@ define <128 x i1> @fcmp_oeq_vv_v128f16(<128 x half> %va, <128 x half> %vb, <128 
 ; ZVFH-NEXT:    vle16.v v24, (a0)
 ; ZVFH-NEXT:    addi a0, sp, 16
 ; ZVFH-NEXT:    vs8r.v v24, (a0) # Unknown-size Folded Spill
+; ZVFH-NEXT:    mv a0, a2
 ; ZVFH-NEXT:    vsetivli zero, 8, e8, m1, ta, ma
 ; ZVFH-NEXT:    vslidedown.vi v6, v0, 8
-; ZVFH-NEXT:    mv a0, a2
 ; ZVFH-NEXT:    bltu a2, a3, .LBB43_2
 ; ZVFH-NEXT:  # %bb.1:
 ; ZVFH-NEXT:    li a0, 64
@@ -2785,9 +2785,9 @@ define <32 x i1> @fcmp_oeq_vv_v32f64(<32 x double> %va, <32 x double> %vb, <32 x
 ; CHECK-NEXT:    addi a0, sp, 16
 ; CHECK-NEXT:    vs8r.v v24, (a0) # Unknown-size Folded Spill
 ; CHECK-NEXT:    li a1, 16
+; CHECK-NEXT:    mv a0, a2
 ; CHECK-NEXT:    vsetivli zero, 2, e8, mf4, ta, ma
 ; CHECK-NEXT:    vslidedown.vi v6, v0, 2
-; CHECK-NEXT:    mv a0, a2
 ; CHECK-NEXT:    bltu a2, a1, .LBB87_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    li a0, 16
