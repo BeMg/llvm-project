@@ -8688,24 +8688,24 @@ define <vscale x 32 x half> @vfmsub_vv_nxv32f16(<vscale x 32 x half> %va, <vscal
 ; ZVFHMIN-NEXT:    vxor.vx v16, v24, a0, v0.t
 ; ZVFHMIN-NEXT:    csrr a0, vlenb
 ; ZVFHMIN-NEXT:    slli a2, a0, 1
-; ZVFHMIN-NEXT:    mv a3, a1
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    mv a5, a4
-; ZVFHMIN-NEXT:    slli a4, a4, 3
-; ZVFHMIN-NEXT:    add a5, a5, a4
-; ZVFHMIN-NEXT:    slli a4, a4, 1
-; ZVFHMIN-NEXT:    add a4, a4, a5
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v16, (a4) # Unknown-size Folded Spill
-; ZVFHMIN-NEXT:    vsetvli a4, zero, e16, m4, ta, ma
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    mv a4, a3
+; ZVFHMIN-NEXT:    slli a3, a3, 3
+; ZVFHMIN-NEXT:    add a4, a4, a3
+; ZVFHMIN-NEXT:    slli a3, a3, 1
+; ZVFHMIN-NEXT:    add a3, a3, a4
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v16, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    vsetvli a3, zero, e16, m4, ta, ma
 ; ZVFHMIN-NEXT:    vfwcvt.f.f.v v24, v16
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a5, a4, 4
-; ZVFHMIN-NEXT:    add a4, a5, a4
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v24, (a4) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a4, a3, 4
+; ZVFHMIN-NEXT:    add a3, a4, a3
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v24, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    mv a3, a1
 ; ZVFHMIN-NEXT:    bltu a1, a2, .LBB280_2
 ; ZVFHMIN-NEXT:  # %bb.1:
 ; ZVFHMIN-NEXT:    mv a3, a2
@@ -8975,19 +8975,19 @@ define <vscale x 32 x half> @vfmsub_vf_nxv32f16(<vscale x 32 x half> %va, half %
 ; ZVFHMIN-NEXT:    vxor.vx v16, v16, a1, v0.t
 ; ZVFHMIN-NEXT:    csrr a1, vlenb
 ; ZVFHMIN-NEXT:    slli a2, a1, 1
-; ZVFHMIN-NEXT:    mv a3, a0
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a4, a4, 4
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v16, (a4) # Unknown-size Folded Spill
-; ZVFHMIN-NEXT:    vsetvli a4, zero, e16, m4, ta, ma
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a3, a3, 4
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v16, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    vsetvli a3, zero, e16, m4, ta, ma
 ; ZVFHMIN-NEXT:    vfwcvt.f.f.v v24, v16
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a4, a4, 3
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v24, (a4) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a3, a3, 3
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v24, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    bltu a0, a2, .LBB282_2
 ; ZVFHMIN-NEXT:  # %bb.1:
 ; ZVFHMIN-NEXT:    mv a3, a2
@@ -9107,19 +9107,19 @@ define <vscale x 32 x half> @vfmsub_vf_nxv32f16_commute(<vscale x 32 x half> %va
 ; ZVFHMIN-NEXT:    vxor.vx v16, v16, a1, v0.t
 ; ZVFHMIN-NEXT:    csrr a1, vlenb
 ; ZVFHMIN-NEXT:    slli a2, a1, 1
-; ZVFHMIN-NEXT:    mv a3, a0
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a4, a4, 4
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v16, (a4) # Unknown-size Folded Spill
-; ZVFHMIN-NEXT:    vsetvli a4, zero, e16, m4, ta, ma
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a3, a3, 4
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v16, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    vsetvli a3, zero, e16, m4, ta, ma
 ; ZVFHMIN-NEXT:    vfwcvt.f.f.v v24, v16
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a4, a4, 3
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v24, (a4) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a3, a3, 3
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v24, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    bltu a0, a2, .LBB283_2
 ; ZVFHMIN-NEXT:  # %bb.1:
 ; ZVFHMIN-NEXT:    mv a3, a2
@@ -11568,15 +11568,15 @@ define <vscale x 32 x half> @vfnmsub_vf_nxv32f16(<vscale x 32 x half> %va, half 
 ; ZVFHMIN-NEXT:    vxor.vx v8, v8, a1, v0.t
 ; ZVFHMIN-NEXT:    csrr a1, vlenb
 ; ZVFHMIN-NEXT:    slli a2, a1, 1
-; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    vmv4r.v v4, v12
-; ZVFHMIN-NEXT:    vsetvli a4, zero, e16, m4, ta, ma
+; ZVFHMIN-NEXT:    vsetvli a3, zero, e16, m4, ta, ma
 ; ZVFHMIN-NEXT:    vfwcvt.f.f.v v24, v8
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a4, a4, 4
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v24, (a4) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a3, a3, 4
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v24, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    bltu a0, a2, .LBB302_2
 ; ZVFHMIN-NEXT:  # %bb.1:
 ; ZVFHMIN-NEXT:    mv a3, a2
@@ -11708,10 +11708,10 @@ define <vscale x 32 x half> @vfnmsub_vf_nxv32f16_commute(<vscale x 32 x half> %v
 ; ZVFHMIN-NEXT:    vxor.vx v8, v8, a1, v0.t
 ; ZVFHMIN-NEXT:    csrr a1, vlenb
 ; ZVFHMIN-NEXT:    slli a2, a1, 1
-; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    vmv4r.v v4, v12
-; ZVFHMIN-NEXT:    vsetvli a4, zero, e16, m4, ta, ma
+; ZVFHMIN-NEXT:    vsetvli a3, zero, e16, m4, ta, ma
 ; ZVFHMIN-NEXT:    vfwcvt.f.f.v v16, v8
+; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    bltu a0, a2, .LBB303_2
 ; ZVFHMIN-NEXT:  # %bb.1:
 ; ZVFHMIN-NEXT:    mv a3, a2
@@ -12081,14 +12081,14 @@ define <vscale x 32 x half> @vfnmsub_vf_nxv32f16_neg_splat(<vscale x 32 x half> 
 ; ZVFHMIN-NEXT:    vxor.vx v8, v8, a1, v0.t
 ; ZVFHMIN-NEXT:    csrr a1, vlenb
 ; ZVFHMIN-NEXT:    slli a2, a1, 1
-; ZVFHMIN-NEXT:    mv a3, a0
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a4, a4, 3
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v8, (a4) # Unknown-size Folded Spill
-; ZVFHMIN-NEXT:    vsetvli a4, zero, e16, m4, ta, ma
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a3, a3, 3
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v8, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    vsetvli a3, zero, e16, m4, ta, ma
 ; ZVFHMIN-NEXT:    vfwcvt.f.f.v v24, v8
+; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    bltu a0, a2, .LBB306_2
 ; ZVFHMIN-NEXT:  # %bb.1:
 ; ZVFHMIN-NEXT:    mv a3, a2
@@ -12208,22 +12208,22 @@ define <vscale x 32 x half> @vfnmsub_vf_nxv32f16_neg_splat_commute(<vscale x 32 
 ; ZVFHMIN-NEXT:    vxor.vx v16, v24, a1, v0.t
 ; ZVFHMIN-NEXT:    csrr a1, vlenb
 ; ZVFHMIN-NEXT:    slli a2, a1, 1
-; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    vmv4r.v v28, v20
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a5, a4, 4
-; ZVFHMIN-NEXT:    add a4, a5, a4
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v24, (a4) # Unknown-size Folded Spill
-; ZVFHMIN-NEXT:    vsetvli a4, zero, e16, m4, ta, ma
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a4, a3, 4
+; ZVFHMIN-NEXT:    add a3, a4, a3
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v24, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    vsetvli a3, zero, e16, m4, ta, ma
 ; ZVFHMIN-NEXT:    vfwcvt.f.f.v v24, v16
-; ZVFHMIN-NEXT:    csrr a4, vlenb
-; ZVFHMIN-NEXT:    slli a5, a4, 3
-; ZVFHMIN-NEXT:    add a4, a5, a4
-; ZVFHMIN-NEXT:    add a4, sp, a4
-; ZVFHMIN-NEXT:    addi a4, a4, 16
-; ZVFHMIN-NEXT:    vs8r.v v24, (a4) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    csrr a3, vlenb
+; ZVFHMIN-NEXT:    slli a4, a3, 3
+; ZVFHMIN-NEXT:    add a3, a4, a3
+; ZVFHMIN-NEXT:    add a3, sp, a3
+; ZVFHMIN-NEXT:    addi a3, a3, 16
+; ZVFHMIN-NEXT:    vs8r.v v24, (a3) # Unknown-size Folded Spill
+; ZVFHMIN-NEXT:    mv a3, a0
 ; ZVFHMIN-NEXT:    bltu a0, a2, .LBB307_2
 ; ZVFHMIN-NEXT:  # %bb.1:
 ; ZVFHMIN-NEXT:    mv a3, a2

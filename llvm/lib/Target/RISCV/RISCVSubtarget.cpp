@@ -199,8 +199,3 @@ unsigned RISCVSubtarget::getMinimumJumpTableEntries() const {
              ? RISCVMinimumJumpTableEntries
              : TuneInfo->MinimumJumpTableEntries;
 }
-
-void RISCVSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
-                                         unsigned NumRegionInstrs) const {
-  Policy.ShouldTrackPressure = true;
-}

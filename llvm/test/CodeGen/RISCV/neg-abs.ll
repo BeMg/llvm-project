@@ -208,10 +208,10 @@ define i64 @neg_abs64_multiuse(i64 %x, ptr %y) {
 ; RV32I-NEXT:    sub a1, a1, a3
 ; RV32I-NEXT:    neg a0, a0
 ; RV32I-NEXT:  .LBB5_2:
+; RV32I-NEXT:    sw a0, 0(a2)
 ; RV32I-NEXT:    snez a3, a0
 ; RV32I-NEXT:    neg a4, a1
 ; RV32I-NEXT:    sub a3, a4, a3
-; RV32I-NEXT:    sw a0, 0(a2)
 ; RV32I-NEXT:    neg a0, a0
 ; RV32I-NEXT:    sw a1, 4(a2)
 ; RV32I-NEXT:    mv a1, a3
@@ -226,10 +226,10 @@ define i64 @neg_abs64_multiuse(i64 %x, ptr %y) {
 ; RV32ZBB-NEXT:    sub a1, a1, a3
 ; RV32ZBB-NEXT:    neg a0, a0
 ; RV32ZBB-NEXT:  .LBB5_2:
+; RV32ZBB-NEXT:    sw a0, 0(a2)
 ; RV32ZBB-NEXT:    snez a3, a0
 ; RV32ZBB-NEXT:    neg a4, a1
 ; RV32ZBB-NEXT:    sub a3, a4, a3
-; RV32ZBB-NEXT:    sw a0, 0(a2)
 ; RV32ZBB-NEXT:    neg a0, a0
 ; RV32ZBB-NEXT:    sw a1, 4(a2)
 ; RV32ZBB-NEXT:    mv a1, a3
