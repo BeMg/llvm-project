@@ -548,7 +548,7 @@ bool RISCVPassConfig::addGlobalInstructionSelect() {
 
 void RISCVPassConfig::addPreSched2() {
   addPass(createRISCVPostRAExpandPseudoPass());
-
+  addPass(createRISCVInsertVSETVLIAfterExpandPseudosPass());
   // Emit KCFI checks for indirect calls.
   addPass(createKCFIPass());
 }

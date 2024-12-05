@@ -36,6 +36,8 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscv-insert-vsetvli"
 #define RISCV_INSERT_VSETVLI_NAME "RISC-V Insert VSETVLI pass"
+#define RISCV_INSERT_VSETVLI_AFTER_EXPAND_PSEUDO_NAME                          \
+  "RISC-V Expand Post-RA Pseudos Insert VSETVLI pass"
 
 STATISTIC(NumInsertedVSETVL, "Number of VSETVL inst inserted");
 STATISTIC(NumCoalescedVSETVL, "Number of VSETVL inst coalesced");
@@ -959,6 +961,35 @@ private:
   void forwardVSETVLIAVL(VSETVLIInfo &Info) const;
 };
 
+class RISCVInsertVSETVLIAfterExpandPseudos : public MachineFunctionPass {
+  const RISCVSubtarget *ST;
+  const TargetInstrInfo *TII;
+
+  std::vector<BlockData> BlockInfo;
+  std::queue<const MachineBasicBlock *> WorkList;
+
+public:
+  static char ID;
+
+  RISCVInsertVSETVLIAfterExpandPseudos() : MachineFunctionPass(ID) {}
+  bool runOnMachineFunction(MachineFunction &MF) override;
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.setPreservesCFG();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+
+  StringRef getPassName() const override {
+    return RISCV_INSERT_VSETVLI_AFTER_EXPAND_PSEUDO_NAME;
+  }
+
+private:
+  bool computeVLVTYPEChanges(const MachineBasicBlock &MBB,
+                             VSETVLIInfo &Info) const;
+  void computeIncomingVLVTYPE(const MachineBasicBlock &MBB);
+  bool insertVSETIVLIBeforeCopy(MachineBasicBlock &MBB);
+};
+
 } // end anonymous namespace
 
 char RISCVInsertVSETVLI::ID = 0;
@@ -966,6 +997,13 @@ char &llvm::RISCVInsertVSETVLIID = RISCVInsertVSETVLI::ID;
 
 INITIALIZE_PASS(RISCVInsertVSETVLI, DEBUG_TYPE, RISCV_INSERT_VSETVLI_NAME,
                 false, false)
+
+char RISCVInsertVSETVLIAfterExpandPseudos::ID = 0;
+char &llvm::RISCVInsertVSETVLIAfterExpandPseudosID =
+    RISCVInsertVSETVLIAfterExpandPseudos::ID;
+
+INITIALIZE_PASS(RISCVInsertVSETVLIAfterExpandPseudos, DEBUG_TYPE,
+                RISCV_INSERT_VSETVLI_AFTER_EXPAND_PSEUDO_NAME, false, false)
 
 // If the AVL is defined by a vsetvli's output vl with the same VLMAX, we can
 // replace the AVL operand with the AVL of the defining vsetvli. E.g.
@@ -1908,4 +1946,171 @@ bool RISCVInsertVSETVLI::runOnMachineFunction(MachineFunction &MF) {
 /// Returns an instance of the Insert VSETVLI pass.
 FunctionPass *llvm::createRISCVInsertVSETVLIPass() {
   return new RISCVInsertVSETVLI();
+}
+
+/// Returns an instance of the Insert VSETVLI pass.
+FunctionPass *llvm::createRISCVInsertVSETVLIAfterExpandPseudosPass() {
+  return new RISCVInsertVSETVLIAfterExpandPseudos();
+}
+
+bool RISCVInsertVSETVLIAfterExpandPseudos::computeVLVTYPEChanges(
+    const MachineBasicBlock &MBB, VSETVLIInfo &Info) const {
+  bool HadVectorOp = false;
+
+  Info = BlockInfo[MBB.getNumber()].Pred;
+  for (const MachineInstr &MI : MBB) {
+    if (isVectorConfigInstr(MI) || RISCVII::hasSEWOp(MI.getDesc().TSFlags)) {
+      Info = VSETVLIInfo::getUnknown();
+      HadVectorOp = true;
+    }
+  }
+
+  return HadVectorOp;
+}
+
+void RISCVInsertVSETVLIAfterExpandPseudos::computeIncomingVLVTYPE(
+    const MachineBasicBlock &MBB) {
+
+  BlockData &BBInfo = BlockInfo[MBB.getNumber()];
+
+  BBInfo.InQueue = false;
+
+  // Start with the previous entry so that we keep the most conservative state
+  // we have ever found.
+  VSETVLIInfo InInfo = BBInfo.Pred;
+  if (MBB.pred_empty()) {
+    // There are no predecessors, so use the default starting status.
+    // Remain the uninit.
+  } else {
+    for (MachineBasicBlock *P : MBB.predecessors())
+      InInfo = InInfo.intersect(BlockInfo[P->getNumber()].Exit);
+  }
+
+  // If we don't have any valid predecessor value, wait until we do.
+  if (!InInfo.isValid())
+    return;
+
+  // If no change, no need to rerun block
+  if (InInfo == BBInfo.Pred)
+    return;
+
+  BBInfo.Pred = InInfo;
+  LLVM_DEBUG(dbgs() << "Entry state of " << printMBBReference(MBB)
+                    << " changed to " << BBInfo.Pred << "\n");
+
+  // Note: It's tempting to cache the state changes here, but due to the
+  // compatibility checks performed a blocks output state can change based on
+  // the input state.  To cache, we'd have to add logic for finding
+  // never-compatible state changes.
+  VSETVLIInfo TmpStatus;
+  computeVLVTYPEChanges(MBB, TmpStatus);
+
+  // If the new exit value matches the old exit value, we don't need to revisit
+  // any blocks.
+  if (BBInfo.Exit == TmpStatus)
+    return;
+
+  BBInfo.Exit = TmpStatus;
+  LLVM_DEBUG(dbgs() << "Exit state of " << printMBBReference(MBB)
+                    << " changed to " << BBInfo.Exit << "\n");
+
+  // Add the successors to the work list so we can propagate the changed exit
+  // status.
+  for (MachineBasicBlock *S : MBB.successors())
+    if (!BlockInfo[S->getNumber()].InQueue) {
+      BlockInfo[S->getNumber()].InQueue = true;
+      WorkList.push(S);
+    }
+}
+
+static bool isRVVCopy(const MachineInstr &MI) {
+  unsigned Opcode = MI.getOpcode();
+
+  return Opcode == RISCV::VMV1R_V || Opcode == RISCV::VMV2R_V ||
+         Opcode == RISCV::VMV4R_V || Opcode == RISCV::VMV8R_V ||
+         Opcode == RISCV::PseudoVMV_V_V_M1 ||
+         Opcode == RISCV::PseudoVMV_V_V_M2 ||
+         Opcode == RISCV::PseudoVMV_V_V_M4 || Opcode == RISCV::PseudoVMV_V_V_M8;
+}
+
+bool RISCVInsertVSETVLIAfterExpandPseudos::insertVSETIVLIBeforeCopy(
+    MachineBasicBlock &MBB) {
+
+  bool Changed = false;
+  bool NeedVSETVL = true;
+
+  if (BlockInfo[MBB.getNumber()].Pred.isValid())
+    NeedVSETVL = false;
+
+  for (auto &MI : MBB) {
+    if (isVectorConfigInstr(MI))
+      NeedVSETVL = false;
+
+    if (MI.isCall() || MI.isInlineAsm())
+      NeedVSETVL = true;
+
+    if (NeedVSETVL && isRVVCopy(MI)) {
+      BuildMI(MBB, &MI, MI.getDebugLoc(), TII->get(RISCV::PseudoVSETIVLI))
+          .addReg(RISCV::X0, RegState::Define | RegState::Dead)
+          .addImm(0)
+          .addImm(
+              RISCVVType::encodeVTYPE(RISCVII::VLMUL::LMUL_1, 8, false, false));
+      NeedVSETVL = false;
+      Changed = true;
+    }
+  }
+  return Changed;
+}
+
+bool RISCVInsertVSETVLIAfterExpandPseudos::runOnMachineFunction(
+    MachineFunction &MF) {
+
+  // Addresses issue https://github.com/llvm/llvm-project/issues/114518
+  // This pass runs after post-RA pseudo expansion to ensure that any additional
+  // COPY instructions generated after the first VSETVL insertion pass do not
+  // cause illegal instruction traps. During VSETVL insertion, this pass must
+  // track the VSETVL status for each basic block. Otherwise, the VL/VTYPE
+  // status may be invalidated by newer VSETVL instructions.
+
+  // The original VSETVL pass cannot be reused since it heavily relies on
+  // virtual registers and LiveInterval. This pass only needs to track whether a
+  // valid VTYPE is maintained from the beginning of the basic block. Therefore,
+  // this code copies and rewrites the analysis part of VSETVLInfo but only
+  // keeps the Unknown and Uninitialized states.
+
+  // Skip if the vector extension is not enabled.
+  ST = &MF.getSubtarget<RISCVSubtarget>();
+  if (!ST->hasVInstructions())
+    return false;
+
+  TII = ST->getInstrInfo();
+  assert(BlockInfo.empty() && "Expect empty block infos");
+  BlockInfo.resize(MF.getNumBlockIDs());
+
+  // Phase 1 - determine how VL/VTYPE are affected by the each block.
+  for (const MachineBasicBlock &MBB : MF) {
+    VSETVLIInfo TmpStatus;
+    computeVLVTYPEChanges(MBB, TmpStatus);
+    // Initial exit state is whatever change we found in the block.
+    BlockData &BBInfo = BlockInfo[MBB.getNumber()];
+    BBInfo.Exit = TmpStatus;
+  }
+
+  // Phase 2 - determine the exit VL/VTYPE from each block.
+  for (const MachineBasicBlock &MBB : MF) {
+    WorkList.push(&MBB);
+    BlockInfo[MBB.getNumber()].InQueue = true;
+  }
+  while (!WorkList.empty()) {
+    const MachineBasicBlock &MBB = *WorkList.front();
+    WorkList.pop();
+    computeIncomingVLVTYPE(MBB);
+  }
+
+  bool Changed = false;
+  for (MachineBasicBlock &MBB : MF)
+    Changed |= insertVSETIVLIBeforeCopy(MBB);
+
+  BlockInfo.clear();
+  return Changed;
 }

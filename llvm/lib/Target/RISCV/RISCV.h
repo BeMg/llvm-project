@@ -68,6 +68,10 @@ FunctionPass *createRISCVInsertVSETVLIPass();
 void initializeRISCVInsertVSETVLIPass(PassRegistry &);
 extern char &RISCVInsertVSETVLIID;
 
+FunctionPass *createRISCVInsertVSETVLIAfterExpandPseudosPass();
+void initializeRISCVInsertVSETVLIAfterExpandPseudosPass(PassRegistry &);
+extern char &RISCVInsertVSETVLIAfterExpandPseudosID;
+
 FunctionPass *createRISCVPostRAExpandPseudoPass();
 void initializeRISCVPostRAExpandPseudoPass(PassRegistry &);
 FunctionPass *createRISCVInsertReadWriteCSRPass();

@@ -175,6 +175,7 @@
 ; CHECK-NEXT:       Machine Copy Propagation Pass
 ; CHECK-NEXT:       Post-RA pseudo instruction expansion pass
 ; CHECK-NEXT:       RISC-V post-regalloc pseudo instruction expansion pass
+; CHECK-NEXT:       RISC-V Expand Post-RA Pseudos Insert VSETVLI pass
 ; CHECK-NEXT:       Insert KCFI indirect call checks
 ; CHECK-NEXT:       MachineDominator Tree Construction
 ; CHECK-NEXT:       Machine Natural Loop Construction
