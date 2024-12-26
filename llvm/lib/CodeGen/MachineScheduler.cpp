@@ -161,6 +161,12 @@ static cl::opt<bool> EnableCyclicPath("misched-cyclicpath", cl::Hidden,
 static cl::opt<bool> EnableMemOpCluster("misched-cluster", cl::Hidden,
                                         cl::desc("Enable memop clustering."),
                                         cl::init(true));
+
+static cl::opt<bool>
+    EnableReleasePendingQ("release-pending-queue", cl::Hidden,
+                          cl::desc("Release the pending queue"),
+                          cl::init(true));
+
 static cl::opt<bool>
     ForceFastCluster("force-fast-cluster", cl::Hidden,
                      cl::desc("Switch to fast cluster algorithm with the lost "
@@ -3657,10 +3663,57 @@ void GenericScheduler::pickNodeFromQueue(SchedBoundary &Zone,
   }
 }
 
+void GenericScheduler::releaseSUFromPending(bool IsTop) {
+  // FIXME: Merge two section
+  if (IsTop) {
+    ReadyQueue &Q = Top.Pending;
+    for (SUnit *SU : Q) {
+      RegPressureTracker &TempTracker =
+          const_cast<RegPressureTracker &>(DAG->getTopRPTracker());
+      CandPolicy TempPolicy;
+      SchedCandidate TryCand(TempPolicy);
+      initCandidate(TryCand, SU, IsTop, DAG->getTopRPTracker(), TempTracker);
+      if (!TryCand.RPDelta.Excess.isValid())
+        continue;
+      if (TRI->needReleaseSUFromPendingQueue(
+              DAG->MF, DAG->getTopRPTracker().getPressure().MaxSetPressure,
+              TryCand.RPDelta.Excess.getPSet(),
+              TryCand.RPDelta.Excess.getUnitInc()))
+        Top.releaseSUFromPending(SU);
+    }
+  } else {
+    ReadyQueue &Q = Bot.Pending;
+    for (SUnit *SU : Q) {
+      RegPressureTracker &TempTracker =
+          const_cast<RegPressureTracker &>(DAG->getTopRPTracker());
+      CandPolicy TempPolicy;
+      SchedCandidate TryCand(TempPolicy);
+      initCandidate(TryCand, SU, IsTop, DAG->getBotRPTracker(), TempTracker);
+      if (!TryCand.RPDelta.Excess.isValid())
+        continue;
+      if (TRI->needReleaseSUFromPendingQueue(
+              DAG->MF, DAG->getBotRPTracker().getPressure().MaxSetPressure,
+              TryCand.RPDelta.Excess.getPSet(),
+              TryCand.RPDelta.Excess.getUnitInc()))
+        Bot.releaseSUFromPending(SU);
+    }
+  }
+}
+
 /// Pick the best candidate node from either the top or bottom queue.
 SUnit *GenericScheduler::pickNodeBidirectional(bool &IsTopNode) {
   // Schedule as far as possible in the direction of no choice. This is most
   // efficient, but also provides the best heuristics for CriticalPSets.
+
+  if (EnableReleasePendingQ &&
+      TRI->needReleasePendingQueue(
+          DAG->MF, DAG->getTopRPTracker().getPressure().MaxSetPressure))
+    releaseSUFromPending(true);
+  if (EnableReleasePendingQ &&
+      TRI->needReleasePendingQueue(
+          DAG->MF, DAG->getBotRPTracker().getPressure().MaxSetPressure))
+    releaseSUFromPending(false);
+
   if (SUnit *SU = Bot.pickOnlyChoice()) {
     IsTopNode = false;
     tracePick(Only1, false);
@@ -3745,6 +3798,10 @@ SUnit *GenericScheduler::pickNode(bool &IsTopNode) {
   SUnit *SU;
   do {
     if (RegionPolicy.OnlyTopDown) {
+      if (EnableReleasePendingQ &&
+          TRI->needReleasePendingQueue(
+              DAG->MF, DAG->getTopRPTracker().getPressure().MaxSetPressure))
+        releaseSUFromPending(true);
       SU = Top.pickOnlyChoice();
       if (!SU) {
         CandPolicy NoPolicy;
@@ -3756,6 +3813,10 @@ SUnit *GenericScheduler::pickNode(bool &IsTopNode) {
       }
       IsTopNode = true;
     } else if (RegionPolicy.OnlyBottomUp) {
+      if (EnableReleasePendingQ &&
+          TRI->needReleasePendingQueue(
+              DAG->MF, DAG->getBotRPTracker().getPressure().MaxSetPressure))
+        releaseSUFromPending(false);
       SU = Bot.pickOnlyChoice();
       if (!SU) {
         CandPolicy NoPolicy;

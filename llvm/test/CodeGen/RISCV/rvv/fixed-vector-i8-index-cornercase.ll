@@ -137,22 +137,23 @@ define <512 x i8> @two_source(<512 x i8> %a, <512 x i8> %b) {
 ; CHECK-NEXT:    vsetvli zero, a2, e8, m8, tu, ma
 ; CHECK-NEXT:    vslideup.vx v8, v24, a1
 ; CHECK-NEXT:    li a1, 501
-; CHECK-NEXT:    lui a2, %hi(.LCPI2_1)
-; CHECK-NEXT:    addi a2, a2, %lo(.LCPI2_1)
-; CHECK-NEXT:    vsetivli zero, 8, e64, m1, ta, ma
-; CHECK-NEXT:    vle64.v v0, (a2)
-; CHECK-NEXT:    li a2, 500
-; CHECK-NEXT:    vmv.s.x v24, a3
-; CHECK-NEXT:    lui a3, %hi(.LCPI2_0)
-; CHECK-NEXT:    addi a3, a3, %lo(.LCPI2_0)
+; CHECK-NEXT:    lui a2, %hi(.LCPI2_0)
+; CHECK-NEXT:    addi a2, a2, %lo(.LCPI2_0)
 ; CHECK-NEXT:    vsetvli zero, a0, e8, m8, ta, ma
-; CHECK-NEXT:    vle8.v v16, (a3)
+; CHECK-NEXT:    vle8.v v24, (a2)
+; CHECK-NEXT:    li a2, 500
+; CHECK-NEXT:    vmv.s.x v0, a3
+; CHECK-NEXT:    lui a3, %hi(.LCPI2_1)
+; CHECK-NEXT:    addi a3, a3, %lo(.LCPI2_1)
+; CHECK-NEXT:    vsetivli zero, 8, e64, m1, ta, ma
+; CHECK-NEXT:    vle64.v v16, (a3)
 ; CHECK-NEXT:    vsetvli zero, a1, e8, m8, tu, ma
-; CHECK-NEXT:    vslideup.vx v8, v24, a2
+; CHECK-NEXT:    vslideup.vx v8, v0, a2
+; CHECK-NEXT:    vmv1r.v v0, v16
 ; CHECK-NEXT:    addi a1, sp, 1520
-; CHECK-NEXT:    vl8r.v v24, (a1) # Unknown-size Folded Reload
+; CHECK-NEXT:    vl8r.v v16, (a1) # Unknown-size Folded Reload
 ; CHECK-NEXT:    vsetvli zero, a0, e8, m8, ta, mu
-; CHECK-NEXT:    vrgather.vv v8, v24, v16, v0.t
+; CHECK-NEXT:    vrgather.vv v8, v16, v24, v0.t
 ; CHECK-NEXT:    addi sp, s0, -1536
 ; CHECK-NEXT:    .cfi_def_cfa sp, 1536
 ; CHECK-NEXT:    ld ra, 1528(sp) # 8-byte Folded Reload

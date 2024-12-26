@@ -934,3 +934,23 @@ bool RISCVRegisterInfo::getRegAllocationHints(
 
   return BaseImplRetVal;
 }
+
+bool RISCVRegisterInfo::needReleasePendingQueue(
+    MachineFunction &MF, std::vector<unsigned> MaxSetPressure) const {
+  for (unsigned Idx = 0; Idx < MaxSetPressure.size(); Idx++) {
+    if (!StringRef(getRegPressureSetName(Idx)).starts_with("VM"))
+      continue;
+    if (MaxSetPressure[Idx] + 7 > getRegPressureSetLimit(MF, Idx)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool RISCVRegisterInfo::needReleaseSUFromPendingQueue(
+    MachineFunction &MF, std::vector<unsigned> MaxSetPressure, unsigned PSetID,
+    int UnitInc) const {
+  if (StringRef(getRegPressureSetName(PSetID)).starts_with("VM") && UnitInc < 0)
+    return true;
+  return false;
+}

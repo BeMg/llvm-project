@@ -1068,6 +1068,28 @@ public:
   /// Dump the state of the information that tracks resource usage.
   void dumpReservedCycles() const;
   void dumpScheduledState() const;
+
+  // FIXME: Only Release SU base on target.
+  void releaseAnyPendingMayHelp() {
+    if (!Pending.empty()) {
+      for (auto *SU : Pending.elements()) {
+        if (SU->isInstr()) {
+          while (!Pending.empty()) {
+            bumpCycle(CurrCycle + 1);
+            releasePending();
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  void releaseSUFromPending(SUnit *SU) {
+    while (!Pending.empty() && llvm::find(Pending, SU) != Pending.end()) {
+      bumpCycle(CurrCycle + 1);
+      releasePending();
+    }
+  }
 };
 
 /// Base class for GenericScheduler. This class maintains information about
@@ -1261,6 +1283,8 @@ public:
     Bot.releaseNode(SU, SU->BotReadyCycle, false);
     BotCand.SU = nullptr;
   }
+
+  void releaseSUFromPending(bool IsTop);
 
   void registerRoots() override;
 

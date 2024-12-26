@@ -132,6 +132,15 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
                              const MachineFunction &MF, const VirtRegMap *VRM,
                              const LiveRegMatrix *Matrix) const override;
 
+  bool
+  needReleasePendingQueue(MachineFunction &MF,
+                          std::vector<unsigned> MaxSetPressure) const override;
+
+  bool needReleaseSUFromPendingQueue(MachineFunction &MF,
+                                     std::vector<unsigned> MaxSetPressure,
+                                     unsigned PSetID,
+                                     int UnitInc) const override;
+
   static bool isVRRegClass(const TargetRegisterClass *RC) {
     return RISCVRI::isVRegClass(RC->TSFlags) &&
            RISCVRI::getNF(RC->TSFlags) == 1;

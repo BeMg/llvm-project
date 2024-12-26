@@ -416,8 +416,8 @@ define <64 x i32> @interleave_v32i32(<32 x i32> %x, <32 x i32> %y) {
 ; V128-NEXT:    vzext.vf2 v8, v24
 ; V128-NEXT:    addi a1, a1, -1366
 ; V128-NEXT:    vzext.vf2 v24, v0
-; V128-NEXT:    vmv.s.x v0, a1
 ; V128-NEXT:    vsll.vx v8, v8, a0
+; V128-NEXT:    vmv.s.x v0, a1
 ; V128-NEXT:    vsetvli zero, a0, e32, m8, ta, ma
 ; V128-NEXT:    vmerge.vvm v24, v24, v8, v0
 ; V128-NEXT:    addi a0, sp, 16

@@ -1234,6 +1234,19 @@ public:
   getVRegFlagsOfReg(Register Reg, const MachineFunction &MF) const {
     return {};
   }
+
+  virtual bool
+  needReleasePendingQueue(MachineFunction &MF,
+                          std::vector<unsigned> MaxSetPressure) const {
+    return false;
+  }
+
+  virtual bool
+  needReleaseSUFromPendingQueue(MachineFunction &MF,
+                                std::vector<unsigned> MaxSetPressure,
+                                unsigned PSetID, int UnitInc) const {
+    return false;
+  }
 };
 
 //===----------------------------------------------------------------------===//
