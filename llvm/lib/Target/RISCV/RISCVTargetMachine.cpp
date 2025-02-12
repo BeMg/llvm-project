@@ -588,8 +588,6 @@ void RISCVPassConfig::addPreEmitPass2() {
 
 void RISCVPassConfig::addMachineSSAOptimization() {
   addPass(createRISCVVectorPeepholePass());
-  // TODO: Move this to pre regalloc
-  addPass(createRISCVVMV0EliminationPass());
 
   TargetPassConfig::addMachineSSAOptimization();
 
@@ -602,10 +600,6 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
-  // TODO: Move this as late as possible before regalloc
-  if (TM->getOptLevel() == CodeGenOptLevel::None)
-    addPass(createRISCVVMV0EliminationPass());
-
   addPass(createRISCVPreRAExpandPseudoPass());
   if (TM->getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRISCVMergeBaseOffsetOptPass());
@@ -619,6 +613,8 @@ void RISCVPassConfig::addPreRegAlloc() {
 
   if (TM->getOptLevel() != CodeGenOptLevel::None && EnableMachinePipeliner)
     addPass(&MachinePipelinerID);
+
+  addPass(createRISCVVMV0EliminationPass());
 }
 
 void RISCVPassConfig::addFastRegAlloc() {
