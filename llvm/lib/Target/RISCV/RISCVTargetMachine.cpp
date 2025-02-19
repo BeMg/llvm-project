@@ -615,6 +615,7 @@ void RISCVPassConfig::addPreRegAlloc() {
     addPass(&MachinePipelinerID);
 
   addPass(createRISCVVMV0EliminationPass());
+  addPass(&DeadMachineInstructionElimID);
 }
 
 void RISCVPassConfig::addFastRegAlloc() {

@@ -210,14 +210,14 @@ define <16 x float> @shuffle2(<4 x float> %a) vscale_range(2,2) {
 ; CHECK-LABEL: shuffle2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    vsetivli zero, 16, e32, m4, ta, ma
-; CHECK-NEXT:    vmv1r.v v12, v8
-; CHECK-NEXT:    vmv.v.i v8, 0
+; CHECK-NEXT:    vmv.v.i v12, 0
 ; CHECK-NEXT:    vsetivli zero, 4, e32, m1, ta, mu
-; CHECK-NEXT:    vid.v v13
-; CHECK-NEXT:    vadd.vv v13, v13, v13
+; CHECK-NEXT:    vid.v v9
+; CHECK-NEXT:    vadd.vv v9, v9, v9
 ; CHECK-NEXT:    vmv.v.i v0, 6
-; CHECK-NEXT:    vrsub.vi v13, v13, 4
-; CHECK-NEXT:    vrgather.vv v9, v12, v13, v0.t
+; CHECK-NEXT:    vrsub.vi v9, v9, 4
+; CHECK-NEXT:    vrgather.vv v13, v8, v9, v0.t
+; CHECK-NEXT:    vmv4r.v v8, v12
 ; CHECK-NEXT:    ret
   %b = extractelement <4 x float> %a, i32 2
   %c = insertelement <16 x float> <float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float undef, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00, float 0.000000e+00>, float %b, i32 5
