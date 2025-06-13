@@ -705,8 +705,10 @@ ABIArgInfo RISCVABIInfo::classifyArgumentType(QualType Ty, bool IsFixed,
     }
 
     if (const auto *EIT = Ty->getAs<BitIntType>()) {
-      if (EIT->getNumBits() < XLen)
-        return extendType(Ty, CGT.ConvertType(Ty));
+      if (isPromotableIntegerTypeForABI(Ty))
+        return ABIArgInfo::getSignExtend(Ty, CGT.ConvertType(Ty));
+      if (EIT->getNumBits() > XLen && EIT->getNumBits() <= 128)
+        return ABIArgInfo::getSignExtend(Ty, CGT.ConvertType(Ty));
       if (EIT->getNumBits() > 128 ||
           (!getContext().getTargetInfo().hasInt128Type() &&
            EIT->getNumBits() > 64))
