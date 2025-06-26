@@ -699,10 +699,6 @@ ABIArgInfo RISCVABIInfo::classifyArgumentType(QualType Ty, bool IsFixed,
     if (const EnumType *EnumTy = Ty->getAs<EnumType>())
       Ty = EnumTy->getDecl()->getIntegerType();
 
-    // All integral types are promoted to XLen width
-    if (Size < XLen && Ty->isIntegralOrEnumerationType()) {
-      return extendType(Ty, CGT.ConvertType(Ty));
-    }
 
     if (const auto *EIT = Ty->getAs<BitIntType>()) {
       if (isPromotableIntegerTypeForABI(Ty))
@@ -711,10 +707,15 @@ ABIArgInfo RISCVABIInfo::classifyArgumentType(QualType Ty, bool IsFixed,
         return ABIArgInfo::getSignExtend(Ty, CGT.ConvertType(Ty));
       if (EIT->getNumBits() > 128 ||
           (!getContext().getTargetInfo().hasInt128Type() &&
-           EIT->getNumBits() > 64))
+            EIT->getNumBits() > 64))
         return getNaturalAlignIndirect(
             Ty, /*AddrSpace=*/getDataLayout().getAllocaAddrSpace(),
             /*ByVal=*/false);
+    }
+
+    // All integral types are promoted to XLen width
+    if (Size < XLen && Ty->isIntegralOrEnumerationType()) {
+      return extendType(Ty, CGT.ConvertType(Ty));
     }
 
     return ABIArgInfo::getDirect();
