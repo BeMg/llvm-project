@@ -2388,6 +2388,15 @@ def RISCVRVVVectorBits : TypeAttr {
   let ASTNode = 0;
 }
 
+def RISCVRVVNTLH : StmtAttr {
+  let Spellings = [GCC<"rvv_ntlh">, CXX11<"clang", "rvv_ntlh">,
+                   C23<"clang", "rvv_ntlh">, CXX11<"msvc", "rvv_ntlh">,
+                   C23<"msvc", "rvv_ntlh">, Declspec<"rvv_ntlh">];
+  let Args = [UnsignedArgument<"domain">];
+  let Documentation = [RVVNTLHAttrDocs];
+  let Subjects = SubjectList<[Stmt], WarnDiag, "statements">;
+}
+
 // This is not a TargetSpecificAttr so that is silently accepted and
 // ignored on other targets as encouraged by the OpenCL spec.
 //

@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "CodeGenFunction.h"
+#include "clang/AST/ParentMapContext.h"
+#include "clang/AST/Stmt.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/TargetParser/RISCVISAInfo.h"
@@ -425,6 +427,58 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
 
   assert(ID != Intrinsic::not_intrinsic);
 
+  // TODO: Refactor with better search strategy
+  auto getDomainValFromStmtAttr = [this](const CallExpr *E) -> int {
+    auto Parents = getContext().getParents(*E);
+    for (const auto &Parent : Parents) {
+
+      if (const Stmt *S = Parent.get<Stmt>()) {
+
+        if (const auto *AS = dyn_cast<AttributedStmt>(S)) {
+          for (const auto *Attr : AS->getAttrs()) {
+            if (const auto *NTAttr = dyn_cast<RISCVRVVNTLHAttr>(Attr)) {
+              return NTAttr->getDomain();
+            }
+          }
+        }
+
+        auto AttributedParents = getContext().getParents(*S);
+        for (const auto &AttributedParent : AttributedParents) {
+          if (const Stmt *PrevS = AttributedParent.get<Stmt>()) {
+            if (const auto *AS = dyn_cast<AttributedStmt>(PrevS)) {
+              for (const auto *Attr : AS->getAttrs()) {
+                if (const auto *NTAttr = dyn_cast<RISCVRVVNTLHAttr>(Attr)) {
+                  return NTAttr->getDomain();
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return -1;
+  };
+
   llvm::Function *F = CGM.getIntrinsic(ID, IntrinsicTypes);
+
+  // FIXME: Only RVV Load/Store should add the nontemporal metadata.
+  // Or we could check in the backend site.
+  int NTLDomain = getDomainValFromStmtAttr(E);
+  if (NTLDomain != -1) {
+
+    auto *TmpV = Builder.CreateCall(F, Ops, "");
+    llvm::MDNode *RISCVDomainNode = llvm::MDNode::get(
+        getLLVMContext(),
+        llvm::ConstantAsMetadata::get(Builder.getInt32(NTLDomain)));
+    llvm::MDNode *NontemporalNode = llvm::MDNode::get(
+        getLLVMContext(), llvm::ConstantAsMetadata::get(Builder.getInt32(1)));
+
+    TmpV->setMetadata(llvm::LLVMContext::MD_nontemporal, NontemporalNode);
+    TmpV->setMetadata(CGM.getModule().getMDKindID("riscv-nontemporal-domain"),
+                      RISCVDomainNode);
+
+    return TmpV;
+  }
+
   return Builder.CreateCall(F, Ops, "");
 }

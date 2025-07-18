@@ -2976,6 +2976,25 @@ the type is not supported for that value of ``__riscv_v_fixed_vlen``.
 }];
 }
 
+def RVVNTLHAttrDocs : Documentation {
+  let Category = DocCatVariable;
+  let Heading = "clang::rvv_ntlh";
+  let Content = [{
+The ``clang::rvv_ntlh(N)`` attribute make the RISC-V RVV intrinsic function with non-temporal hint. 
+
+.. code-block:: c++
+
+  void foo(const int8_t *base, size_t vl) {
+    vint8mf8_t tmp;
+    [[clang::rvv_ntlh(0)]] tmp = __riscv_vle8_v_i8mf8(base, vl);
+    [[clang::rvv_ntlh(1)]] tmp = __riscv_vle8_v_i8mf8(base, vl);
+    [[clang::rvv_ntlh(2)]] tmp = __riscv_vle8_v_i8mf8(base, vl);
+    [[clang::rvv_ntlh(3)]] tmp = __riscv_vle8_v_i8mf8(base, vl);
+  }
+
+  }];
+}
+
 def AVRInterruptDocs : Documentation {
   let Category = DocCatFunction;
   let Heading = "interrupt (AVR)";

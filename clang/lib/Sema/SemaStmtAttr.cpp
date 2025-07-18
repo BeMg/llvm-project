@@ -390,6 +390,16 @@ static Attr *handleCodeAlignAttr(Sema &S, Stmt *St, const ParsedAttr &A) {
   return S.BuildCodeAlignAttr(A, E);
 }
 
+static Attr *handleRISCVRVVNTLHAttr(Sema &S, Stmt *St, const ParsedAttr &A) {
+
+  Expr *E = A.getArgAsExpr(0);
+  std::optional<llvm::APSInt> ArgVal = E->getIntegerConstantExpr(S.Context);
+  assert(ArgVal != std::nullopt && "ArgVal should be an integer constant.");
+  int Val = ArgVal->getSExtValue();
+
+  return new (S.Context) RISCVRVVNTLHAttr(S.Context, A, Val);
+}
+
 // Diagnose non-identical duplicates as a 'conflicting' loop attributes
 // and suppress duplicate errors in cases where the two match.
 template <typename LoopAttrT>
@@ -723,6 +733,8 @@ static Attr *ProcessStmtAttribute(Sema &S, Stmt *St, const ParsedAttr &A,
     return S.CreateAnnotationAttr(A);
   case ParsedAttr::AT_Atomic:
     return handleAtomicAttr(S, St, A, Range);
+  case ParsedAttr::AT_RISCVRVVNTLH:
+    return handleRISCVRVVNTLHAttr(S, St, A);
   default:
     if (Attr *AT = nullptr; A.getInfo().handleStmtAttribute(S, St, A, AT) !=
                             ParsedAttrInfo::NotHandled) {
