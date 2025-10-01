@@ -16829,6 +16829,10 @@ combineVectorSizedSetCCEquality(EVT VT, SDValue X, SDValue Y, ISD::CondCode CC,
           Attribute::NoImplicitFloat))
     return SDValue();
 
+  if (DAG.getMachineFunction().getFunction().hasFnAttribute(
+          Attribute::NoImplicitVector))
+    return SDValue();
+
   // Bail out for non-byte-sized types.
   if (!OpVT.isByteSized())
     return SDValue();

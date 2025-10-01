@@ -131,6 +131,9 @@ bool SandboxVectorizerPass::runImpl(Function &LLVMF) {
     return false;
   }
 
+  if (LLVMF.hasFnAttribute(Attribute::NoImplicitVector))
+    return false;
+
   // Create SandboxIR for LLVMF and run BottomUpVec on it.
   sandboxir::Function &F = *Ctx->createFunction(&LLVMF);
   sandboxir::Analyses A(*AA, *SE, *TTI);

@@ -2310,6 +2310,8 @@ For example:
     scalar code such as vectorization or memcpy/memset optimization. This
     includes integer vectors. Vector instructions present in IR may still cause
     vector code to be generated.
+``noimplicitvector``
+    Similar as noimplicitfloat but only for SIMD/vector code.
 ``noinline``
     This attribute indicates that the inliner should never inline this
     function in any situation. This attribute may not be used together

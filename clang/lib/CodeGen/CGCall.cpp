@@ -1975,6 +1975,8 @@ static void getTrivialDefaultFunctionAttributes(
     FuncAttrs.addAttribute("indirect-tls-seg-refs");
   if (CodeGenOpts.NoImplicitFloat)
     FuncAttrs.addAttribute(llvm::Attribute::NoImplicitFloat);
+  if (CodeGenOpts.NoImplicitVector)
+    FuncAttrs.addAttribute(llvm::Attribute::NoImplicitVector);
 
   if (AttrOnCallSite) {
     // Attributes that should go on the call site only.

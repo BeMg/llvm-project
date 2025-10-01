@@ -22613,6 +22613,9 @@ bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
   if (F.hasFnAttribute(Attribute::NoImplicitFloat))
     return false;
 
+  if (F.hasFnAttribute(Attribute::NoImplicitVector))
+    return false;
+
   LLVM_DEBUG(dbgs() << "SLP: Analyzing blocks in " << F.getName() << ".\n");
 
   // Use the bottom up slp vectorizer to construct chains that start with

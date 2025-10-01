@@ -5664,6 +5664,13 @@ def mno_implicit_float : Flag<["-"], "mno-implicit-float">, Group<m_Group>,
   HelpText<"Don't generate implicit floating point or vector instructions">;
 def mimplicit_float : Flag<["-"], "mimplicit-float">, Group<m_Group>,
   HelpText<"Generate implicit floating point or vector instructions">;
+def mno_implicit_vector
+    : Flag<["-"], "mno-implicit-vector">,
+      Group<m_Group>,
+      HelpText<"Don't generate implicit vector instructions">;
+def mimplicit_vector : Flag<["-"], "mimplicit-vector">,
+                       Group<m_Group>,
+                       HelpText<"Generate implicit vector instructions">;
 def mrecip : Flag<["-"], "mrecip">, Group<m_Group>,
   Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>,
   HelpText<"Equivalent to '-mrecip=all'">;
@@ -7782,6 +7789,10 @@ def fforbid_guard_variables : Flag<["-"], "fforbid-guard-variables">,
 def no_implicit_float : Flag<["-"], "no-implicit-float">,
   HelpText<"Don't generate implicit floating point or vector instructions">,
   MarshallingInfoFlag<CodeGenOpts<"NoImplicitFloat">>;
+def no_implicit_vector
+    : Flag<["-"], "no-implicit-vector">,
+      HelpText<"Don't generate implicit vector instructions">,
+      MarshallingInfoFlag<CodeGenOpts<"NoImplicitVector">>;
 def fdump_vtable_layouts : Flag<["-"], "fdump-vtable-layouts">,
   HelpText<"Dump the layouts of all vtables that will be emitted in a translation unit">,
   MarshallingInfoFlag<LangOpts<"DumpVTableLayouts">>;

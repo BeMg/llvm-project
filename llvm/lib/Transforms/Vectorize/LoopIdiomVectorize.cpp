@@ -225,6 +225,9 @@ bool LoopIdiomVectorize::run(Loop *L) {
     return false;
   }
 
+  if (F.hasFnAttribute(Attribute::NoImplicitVector))
+    return false;
+
   // If the loop could not be converted to canonical form, it must have an
   // indirectbr in it, just give up.
   if (!L->getLoopPreheader())

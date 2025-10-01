@@ -395,6 +395,9 @@ bool LoadStoreVectorizerLegacyPass::runOnFunction(Function &F) {
   if (skipFunction(F) || F.hasFnAttribute(Attribute::NoImplicitFloat))
     return false;
 
+  if (F.hasFnAttribute(Attribute::NoImplicitVector))
+    return false;
+
   AliasAnalysis &AA = getAnalysis<AAResultsWrapperPass>().getAAResults();
   DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   ScalarEvolution &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
@@ -411,6 +414,9 @@ PreservedAnalyses LoadStoreVectorizerPass::run(Function &F,
                                                FunctionAnalysisManager &AM) {
   // Don't vectorize when the attribute NoImplicitFloat is used.
   if (F.hasFnAttribute(Attribute::NoImplicitFloat))
+    return PreservedAnalyses::all();
+
+  if (F.hasFnAttribute(Attribute::NoImplicitVector))
     return PreservedAnalyses::all();
 
   AliasAnalysis &AA = AM.getResult<AAManager>(F);

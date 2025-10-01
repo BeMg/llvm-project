@@ -204,6 +204,10 @@ def DeadOnReturn : EnumAttr<"dead_on_return", IntersectAnd, [ParamAttr]>;
 /// Disable implicit floating point insts.
 def NoImplicitFloat : EnumAttr<"noimplicitfloat", IntersectPreserve, [FnAttr]>;
 
+/// Disable implicit vector insts.
+def NoImplicitVector
+    : EnumAttr<"noimplicitvector", IntersectPreserve, [FnAttr]>;
+
 /// inline=never.
 def NoInline : EnumAttr<"noinline", IntersectPreserve, [FnAttr]>;
 

@@ -22462,6 +22462,10 @@ bool DAGCombiner::mergeConsecutiveStores(StoreSDNode *St) {
 
   bool AllowVectors = !DAG.getMachineFunction().getFunction().hasFnAttribute(
       Attribute::NoImplicitFloat);
+
+  AllowVectors &= !DAG.getMachineFunction().getFunction().hasFnAttribute(
+      Attribute::NoImplicitVector);
+
   bool IsNonTemporalStore = St->isNonTemporal();
   bool IsNonTemporalLoad = StoreSrc == StoreSource::Load &&
                            cast<LoadSDNode>(StoredVal)->isNonTemporal();

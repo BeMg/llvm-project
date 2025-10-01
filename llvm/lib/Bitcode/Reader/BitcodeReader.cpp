@@ -2109,6 +2109,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::NoFree;
   case bitc::ATTR_KIND_NO_IMPLICIT_FLOAT:
     return Attribute::NoImplicitFloat;
+  case bitc::ATTR_KIND_NO_IMPLICIT_VECTOR:
+    return Attribute::NoImplicitVector;
   case bitc::ATTR_KIND_NO_INLINE:
     return Attribute::NoInline;
   case bitc::ATTR_KIND_NO_RECURSE:

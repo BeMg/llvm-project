@@ -948,6 +948,7 @@ Function *CodeExtractor::constructFunctionDeclaration(
       case Attribute::NoDuplicate:
       case Attribute::NoFree:
       case Attribute::NoImplicitFloat:
+      case Attribute::NoImplicitVector:
       case Attribute::NoInline:
       case Attribute::NonLazyBind:
       case Attribute::NoRedZone:

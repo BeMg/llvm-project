@@ -186,6 +186,7 @@ CODEGENOPT(MisExpect         , 1, 0, Benign) ///< Set when -Wmisexpect is enable
 CODEGENOPT(EnableSegmentedStacks , 1, 0, Benign) ///< Set when -fsplit-stack is enabled.
 CODEGENOPT(StackClashProtector, 1, 0, Benign) ///< Set when -fstack-clash-protection is enabled.
 CODEGENOPT(NoImplicitFloat   , 1, 0, Benign) ///< Set when -mno-implicit-float is enabled.
+CODEGENOPT(NoImplicitVector   , 1, 0, Benign) ///< Set when -mno-implicit-vector is enabled.
 CODEGENOPT(NullPointerIsValid , 1, 0, Benign) ///< Assume Null pointer deference is defined.
 CODEGENOPT(OpenCLCorrectlyRoundedDivSqrt, 1, 0, Benign) ///< -cl-fp32-correctly-rounded-divide-sqrt
 CODEGENOPT(HIPCorrectlyRoundedDivSqrt, 1, 1, Benign) ///< -fno-hip-fp32-correctly-rounded-divide-sqrt

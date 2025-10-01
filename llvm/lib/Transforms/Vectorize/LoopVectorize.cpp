@@ -9974,6 +9974,9 @@ bool LoopVectorizePass::processLoop(Loop *L) {
     return false;
   }
 
+  if (F->hasFnAttribute(Attribute::NoImplicitVector))
+    return false;
+
   // Check if the target supports potentially unsafe FP vectorization.
   // FIXME: Add a check for the type of safety issue (denormal, signaling)
   // for the target we're vectorizing for, to make sure none of the

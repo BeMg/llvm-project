@@ -2015,6 +2015,10 @@ void Clang::AddRISCVTargetArgs(const ArgList &Args,
                     options::OPT_mno_implicit_float, true))
     CmdArgs.push_back("-no-implicit-float");
 
+  if (!Args.hasFlag(options::OPT_mimplicit_vector,
+                    options::OPT_mno_implicit_vector, true))
+    CmdArgs.push_back("-no-implicit-vector");
+
   if (const Arg *A = Args.getLastArg(options::OPT_mtune_EQ)) {
     CmdArgs.push_back("-tune-cpu");
     if (strcmp(A->getValue(), "native") == 0)
