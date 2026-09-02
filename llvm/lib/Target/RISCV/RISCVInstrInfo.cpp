@@ -27,6 +27,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineTraceMetrics.h"
+#include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
 #include "llvm/CodeGen/StackMaps.h"
 #include "llvm/IR/DebugInfoMetadata.h"
@@ -1815,6 +1816,89 @@ bool RISCVInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
   case RISCV::PseudoJump:
     return isInt<32>(SignExtend64(BrOffset + 0x800, XLen));
   }
+}
+
+/// Return true if \p MI, which must be a load, reads an entry out of a jump
+/// table.
+static bool isJumpTableLoad(const MachineInstr &MI) {
+  return any_of(MI.memoperands(), [](const MachineMemOperand *MMO) {
+    const PseudoSourceValue *PSV = MMO->getPseudoValue();
+    return PSV && PSV->isJumpTable();
+  });
+}
+
+/// Walk back from \p Reg through a jump-table address computation and return
+/// the index of the table it reads, or -1 if \p Reg is not part of one.
+static int getJumpTableIndexFromReg(const MachineRegisterInfo &MRI,
+                                    Register Reg, unsigned Depth) {
+  // The sequences below are at most four instructions deep; the bound is
+  // slack for target features that split the address materialization further.
+  constexpr unsigned MaxDepth = 6;
+  if (Depth > MaxDepth || !Reg.isVirtual())
+    return -1;
+
+  const MachineInstr *MI = MRI.getUniqueVRegDef(Reg);
+  if (!MI)
+    return -1;
+
+  // The address materialization carries the jump-table operand directly. Which
+  // instruction holds it, and at which operand index, depends on the relocation
+  // model and on whether RISCVMergeBaseOffset and pseudo expansion have run, so
+  // scan for the operand instead of matching opcodes.
+  for (const MachineOperand &MO : MI->operands())
+    if (MO.isJTI())
+      return MO.getIndex();
+
+  switch (MI->getOpcode()) {
+  case RISCV::ADD:
+  case RISCV::ADDI:
+  case RISCV::SLLI:
+  case RISCV::SH1ADD:
+  case RISCV::SH2ADD:
+  case RISCV::SH3ADD:
+    break;
+  case RISCV::LW:
+  case RISCV::LWU:
+  case RISCV::LD:
+    // Only follow a load that is really reading the table. Without this the
+    // walk could wander into unrelated code and report a table this branch
+    // does not use, which SplitCriticalEdge would then rewrite.
+    if (!isJumpTableLoad(*MI))
+      return -1;
+    break;
+  default:
+    return -1;
+  }
+
+  // Try every register operand: which one holds the table address depends on
+  // the relocation model and on commuted operand order.
+  for (const MachineOperand &MO : MI->all_uses())
+    if (int JTI = getJumpTableIndexFromReg(MRI, MO.getReg(), Depth + 1);
+        JTI >= 0)
+      return JTI;
+
+  return -1;
+}
+
+int RISCVInstrInfo::getJumpTableIndex(const MachineInstr &MI) const {
+  if (MI.getOpcode() != RISCV::PseudoBRIND &&
+      MI.getOpcode() != RISCV::PseudoBRINDX7)
+    return -1;
+
+  // A switch lowered to a jump table looks like:
+  //   %base   = PseudoMovAddr/PseudoLLA/LUI(+ADDI)/QC_E_LI %jump-table.N
+  //   %addr   = SH2ADD %index, %base            (or SLLI + ADD)
+  //   %entry  = LW %addr, 0                     :: (load from jump-table)
+  //   %target = ADD %entry, %base               (PIC only)
+  //   PseudoBRIND %target, 0
+  //
+  // %base is rematerializable and loop invariant, so MachineLICM routinely
+  // hoists it into a dominating block; the walk below therefore has to cross
+  // block boundaries. That is safe because it only follows virtual registers,
+  // and getUniqueVRegDef gives up once the function has left SSA form, so the
+  // post-RA callers of this hook simply get -1.
+  const MachineRegisterInfo &MRI = MI.getMF()->getRegInfo();
+  return getJumpTableIndexFromReg(MRI, MI.getOperand(0).getReg(), /*Depth=*/0);
 }
 
 // If the operation has a predicated pseudo instruction, return the pseudo
