@@ -29,6 +29,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -76,6 +77,13 @@ static cl::opt<bool>
                    cl::desc("Only reorder expressions within a basic block "
                             "when exposing CSE opportunities"),
                    cl::init(true), cl::Hidden);
+
+static cl::opt<unsigned> MaxNegateRelocationFreqRatio(
+    DEBUG_TYPE "-max-negate-relocation-freq-ratio",
+    cl::desc("Do not relocate a shared negation into a block whose frequency "
+             "exceeds this multiple of the combined frequency of the blocks "
+             "that need it (0 disables the check)"),
+    cl::init(4), cl::Hidden);
 
 #ifndef NDEBUG
 /// Print out the expression identified in the Ops list.
@@ -816,8 +824,40 @@ void ReassociatePass::RewriteExprTree(BinaryOperator *I,
 /// Also add intermediate instructions to the redo list that are modified while
 /// pushing the negates through adds.  These will be revisited to see if
 /// additional opportunities have been exposed.
+/// Relocating an existing negation so that it dominates every user makes it
+/// shareable, but it also makes it execute whenever its new home block
+/// executes. That is a loss when the new home is much hotter than the blocks
+/// that actually need the value. The motivating case is a value defined in the
+/// shared dispatch block of a large switch: the negation would then run on
+/// every dispatch in order to serve a handful of cases.
+///
+/// Returns true if the move is worth making. A null \p BFI disables the check.
+static bool isNegateRelocationProfitable(const BasicBlock *NewBB,
+                                         const Instruction *TheNeg,
+                                         const Instruction *BI,
+                                         BlockFrequencyInfo *BFI) {
+  if (!BFI || !MaxNegateRelocationFreqRatio)
+    return true;
+
+  const BasicBlock *OldBB = TheNeg->getParent();
+  if (OldBB == NewBB)
+    return true;
+
+  // The blocks that need the negation today: where it already lives, and the
+  // use the caller is about to rewrite to share it.
+  uint64_t NeedFreq = BFI->getBlockFreq(OldBB).getFrequency();
+  if (BI->getParent() != OldBB)
+    NeedFreq = SaturatingAdd(
+        NeedFreq, BFI->getBlockFreq(BI->getParent()).getFrequency());
+
+  uint64_t NewFreq = BFI->getBlockFreq(NewBB).getFrequency();
+  return NewFreq <=
+         SaturatingMultiply(NeedFreq, uint64_t(MaxNegateRelocationFreqRatio));
+}
+
 static Value *NegateValue(Value *V, Instruction *BI,
-                          ReassociatePass::OrderedSet &ToRedo) {
+                          ReassociatePass::OrderedSet &ToRedo,
+                          BlockFrequencyInfo *BFI) {
   if (auto *C = dyn_cast<Constant>(V)) {
     const DataLayout &DL = BI->getDataLayout();
     Constant *Res = C->getType()->isFPOrFPVectorTy()
@@ -839,8 +879,8 @@ static Value *NegateValue(Value *V, Instruction *BI,
   if (BinaryOperator *I =
           isReassociableOp(V, Instruction::Add, Instruction::FAdd)) {
     // Push the negates through the add.
-    I->setOperand(0, NegateValue(I->getOperand(0), BI, ToRedo));
-    I->setOperand(1, NegateValue(I->getOperand(1), BI, ToRedo));
+    I->setOperand(0, NegateValue(I->getOperand(0), BI, ToRedo, BFI));
+    I->setOperand(1, NegateValue(I->getOperand(1), BI, ToRedo, BFI));
     if (I->getOpcode() == Instruction::Add) {
       I->setHasNoUnsignedWrap(false);
       I->setHasNoSignedWrap(false);
@@ -895,6 +935,11 @@ static Value *NegateValue(Value *V, Instruction *BI,
                      .getFirstNonPHIOrDbg()
                      ->getIterator();
     }
+
+    // Sharing this negation would move it somewhere much hotter than the code
+    // that needs it. Leave it alone and let the caller materialize a local one.
+    if (!isNegateRelocationProfitable(InsertPt->getParent(), TheNeg, BI, BFI))
+      continue;
 
     // Check that if TheNeg is moved out of its parent block, we drop its
     // debug location to avoid extra coverage.
@@ -1108,13 +1153,14 @@ static bool ShouldBreakUpSubtract(Instruction *Sub) {
 /// If we have (X-Y), and if either X is an add, or if this is only used by an
 /// add, transform this into (X+(0-Y)) to promote better reassociation.
 static BinaryOperator *BreakUpSubtract(Instruction *Sub,
-                                       ReassociatePass::OrderedSet &ToRedo) {
+                                       ReassociatePass::OrderedSet &ToRedo,
+                                       BlockFrequencyInfo *BFI) {
   // Convert a subtract into an add and a neg instruction. This allows sub
   // instructions to be commuted with other add instructions.
   //
   // Calculate the negative value of Operand 1 of the sub instruction,
   // and set it as the RHS of the add instruction we just made.
-  Value *NegVal = NegateValue(Sub->getOperand(1), Sub, ToRedo);
+  Value *NegVal = NegateValue(Sub->getOperand(1), Sub, ToRedo, BFI);
   BinaryOperator *New =
       CreateAdd(Sub->getOperand(0), NegVal, "", Sub->getIterator(), Sub);
   Sub->setOperand(0, Constant::getNullValue(Sub->getType())); // Drop use of op.
@@ -2358,7 +2404,7 @@ void ReassociatePass::OptimizeInst(Instruction *I) {
   // see if we can convert it to X+-Y.
   if (I->getOpcode() == Instruction::Sub) {
     if (ShouldBreakUpSubtract(I)) {
-      Instruction *NI = BreakUpSubtract(I, RedoInsts);
+      Instruction *NI = BreakUpSubtract(I, RedoInsts, BFI);
       RedoInsts.insert(I);
       MadeChange = true;
       I = NI;
@@ -2383,7 +2429,7 @@ void ReassociatePass::OptimizeInst(Instruction *I) {
   } else if (I->getOpcode() == Instruction::FNeg ||
              I->getOpcode() == Instruction::FSub) {
     if (ShouldBreakUpSubtract(I)) {
-      Instruction *NI = BreakUpSubtract(I, RedoInsts);
+      Instruction *NI = BreakUpSubtract(I, RedoInsts, BFI);
       RedoInsts.insert(I);
       MadeChange = true;
       I = NI;
@@ -2730,11 +2776,13 @@ PreservedAnalyses ReassociatePass::run(Function &F,
   // UniformityInfo is empty (and cheap) on targets without branch divergence,
   // so request it unconditionally.
   UniformityInfo &UI = AM.getResult<UniformityInfoAnalysis>(F);
-  return runImpl(F, UI);
+  return runImpl(F, UI, &AM.getResult<BlockFrequencyAnalysis>(F));
 }
 
-PreservedAnalyses ReassociatePass::runImpl(Function &F, UniformityInfo &UI) {
+PreservedAnalyses ReassociatePass::runImpl(Function &F, UniformityInfo &UI,
+                                           BlockFrequencyInfo *BFIArg) {
   UA = &UI;
+  BFI = BFIArg;
 
   // Get the functions basic blocks in Reverse Post Order. This order is used by
   // BuildRankMap to pre calculate ranks correctly. It also excludes dead basic
@@ -2804,6 +2852,7 @@ PreservedAnalyses ReassociatePass::runImpl(Function &F, UniformityInfo &UI) {
   for (auto &Entry : PairMap)
     Entry.clear();
   UA = nullptr;
+  BFI = nullptr;
 
   if (MadeChange) {
     PreservedAnalyses PA;

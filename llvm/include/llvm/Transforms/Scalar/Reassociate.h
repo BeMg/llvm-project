@@ -37,6 +37,7 @@ namespace llvm {
 class APInt;
 class BasicBlock;
 class BinaryOperator;
+class BlockFrequencyInfo;
 class Function;
 class Instruction;
 class IRBuilderBase;
@@ -97,11 +98,16 @@ protected:
 
   bool MadeChange;
   UniformityInfo *UA = nullptr;
+  /// Optional. Used to avoid relocating a shared negation into a block that is
+  /// much hotter than the blocks that actually need it. May be null, in which
+  /// case that check is skipped.
+  BlockFrequencyInfo *BFI = nullptr;
 
 public:
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
-  LLVM_ABI PreservedAnalyses runImpl(Function &F, UniformityInfo &UI);
+  LLVM_ABI PreservedAnalyses runImpl(Function &F, UniformityInfo &UI,
+                                     BlockFrequencyInfo *BFI = nullptr);
 
 private:
   void BuildRankMap(Function &F, ReversePostOrderTraversal<Function *> &RPOT);

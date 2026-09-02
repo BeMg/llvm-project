@@ -120,6 +120,10 @@
 ; CHECK-O-NEXT: Running pass: SimplifyCFGPass
 ; CHECK-O-NEXT: Running pass: ReassociatePass
 ; CHECK-O-NEXT: Running analysis: UniformityInfoAnalysis
+; CHECK-O-NEXT: Running analysis: BlockFrequencyAnalysis
+; CHECK-O-NEXT: Running analysis: BranchProbabilityAnalysis
+; CHECK-O-NEXT: Running analysis: CycleAnalysis
+; CHECK-O-NEXT: Running analysis: PostDominatorTreeAnalysis
 ; CHECK-O23-NEXT: Running pass: ConstraintEliminationPass
 ; CHECK-O23-NEXT: Running analysis: LoopAnalysis
 ; CHECK-O23-NEXT: Running analysis: ScalarEvolutionAnalysis
@@ -148,7 +152,6 @@
 ; CHECK-O23-NEXT: Running pass: GVNPass
 ; CHECK-O23-NEXT: Running analysis: MemoryDependenceAnalysis
 ; CHECK-O1-NEXT: Running pass: MemCpyOptPass
-; CHECK-O1-NEXT: Running analysis: PostDominatorTreeAnalysis
 ; CHECK-O-NEXT: Running pass: SCCPPass
 ; CHECK-O-NEXT: Running pass: BDCEPass
 ; CHECK-O-NEXT: Running analysis: DemandedBitsAnalysis
@@ -160,10 +163,8 @@
 ; CHECK-O23-NEXT: Invalidating analysis: LazyValueAnalysis
 ; CHECK-O1-NEXT: Running pass: CoroElidePass
 ; CHECK-O-NEXT: Running pass: ADCEPass
-; CHECK-O23-NEXT: Running analysis: PostDominatorTreeAnalysis
 ; CHECK-O23-NEXT: Running pass: MemCpyOptPass
 ; CHECK-O23-NEXT: Running pass: DSEPass
-; CHECK-O23-NEXT: Running analysis: CycleAnalysis
 ; CHECK-O23-NEXT: Running pass: MoveAutoInitPass
 ; CHECK-O23-NEXT: Running pass: LoopSimplifyPass
 ; CHECK-O23-NEXT: Running pass: LCSSAPass
