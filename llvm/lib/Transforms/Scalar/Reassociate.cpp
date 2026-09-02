@@ -77,6 +77,12 @@ static cl::opt<bool>
                             "when exposing CSE opportunities"),
                    cl::init(true), cl::Hidden);
 
+static cl::opt<unsigned> MaxNumOfNegateRelocationFanout(
+    DEBUG_TYPE "-max-num-negate-relocation-fanout",
+    cl::desc("Do not hoist a shared negation into a block with more than this "
+             "many successors (0 disables the check)"),
+    cl::init(100), cl::Hidden);
+
 #ifndef NDEBUG
 /// Print out the expression identified in the Ops list.
 static void PrintOps(Instruction *I, const SmallVectorImpl<ValueEntry> &Ops) {
@@ -895,6 +901,17 @@ static Value *NegateValue(Value *V, Instruction *BI,
                      .getFirstNonPHIOrDbg()
                      ->getIterator();
     }
+
+    // Hoisting the negation makes it run on every path through its new block.
+    // Don't hoist into a very high-fanout dispatch block.
+    BasicBlock *NewBB = InsertPt->getParent();
+    if (MaxNumOfNegateRelocationFanout && NewBB != TheNeg->getParent() &&
+        NewBB != BI->getParent() &&
+        NewBB->getTerminator()->getNumSuccessors() >
+            MaxNumOfNegateRelocationFanout &&
+        SmallPtrSet<BasicBlock *, 32>(llvm::from_range, successors(NewBB))
+                .size() > MaxNumOfNegateRelocationFanout)
+      continue;
 
     // Check that if TheNeg is moved out of its parent block, we drop its
     // debug location to avoid extra coverage.
