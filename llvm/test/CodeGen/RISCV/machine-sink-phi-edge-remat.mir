@@ -1,0 +1,241 @@
+# RUN: llc -mtriple=riscv64 -mattr=+zba -run-pass=machine-sink -o - %s \
+# RUN:   | FileCheck %s
+# RUN: llc -mtriple=riscv64 -mattr=+zba -run-pass=machine-sink \
+# RUN:     -machine-sink-phi-edge-remat-freq-ratio=0 -o - %s \
+# RUN:   | FileCheck %s --check-prefix=DISABLED
+
+# A trivially rematerializable def in a 40-way jump-table block whose only uses
+# are PHI operands on three specific edges. Ordinary sinking cannot help: no
+# single successor dominates all the uses, so the def stays put and every
+# dispatch pays for it while only three paths need it.
+#
+# %2 is consumed on two of the block's own out-edges (into %bb.2 and %bb.3,
+# both of which have another predecessor, so both edges are critical), and also
+# on the %bb.43 -> %bb.3 edge, which does not leave this block at all but still
+# pins the def down. All three have to be rewritten before %2 can be deleted.
+#
+# The dispatch block should be left holding only the table lookup and branch.
+# CHECK:      bb.1:
+# CHECK-NOT:    ADDI $x0, 2
+# CHECK:        %3:gpr = SH2ADD %0, %1
+# CHECK-NEXT:   %4:gprjalrnonx7 = LW %3, 0 :: (load (s32) from jump-table)
+# CHECK-NEXT:   PseudoBRIND %4, 0
+#
+# Two split edges, each with its own copy, feeding the PHIs that wanted it.
+# CHECK:      bb.{{[0-9]+}}:
+# CHECK:        ADDI $x0, 2
+# CHECK:      bb.{{[0-9]+}}:
+# CHECK:        ADDI $x0, 2
+# CHECK:      bb.2:
+# CHECK:        PHI %{{[0-9]+}}, %bb.{{[0-9]+}}, %6, %bb.42
+# CHECK:      bb.3:
+# CHECK:        PHI %{{[0-9]+}}, %bb.{{[0-9]+}}, %{{[0-9]+}}, %bb.43
+# And the copy for the edge that comes from somewhere else entirely.
+# CHECK:      bb.43:
+# CHECK:        ADDI $x0, 2
+#
+# With the check disabled the def stays where it was.
+# DISABLED:      bb.1:
+# DISABLED:        %2:gpr = ADDI $x0, 2
+# DISABLED-NEXT:   %3:gpr = SH2ADD %0, %1
+
+--- |
+  target triple = "riscv64-unknown-linux-gnu"
+  define void @remat_phi_edges(i64 %idx) { ret void }
+...
+---
+name:            remat_phi_edges
+tracksRegLiveness: true
+jumpTable:
+  kind:            custom32
+  entries:
+    - id:              0
+      blocks:          [ '%bb.2', '%bb.3', '%bb.4', '%bb.5', '%bb.6', '%bb.7', '%bb.8', '%bb.9', '%bb.10', '%bb.11', '%bb.12', '%bb.13', '%bb.14', '%bb.15', '%bb.16', '%bb.17', '%bb.18', '%bb.19', '%bb.20', '%bb.21', '%bb.22', '%bb.23', '%bb.24', '%bb.25', '%bb.26', '%bb.27', '%bb.28', '%bb.29', '%bb.30', '%bb.31', '%bb.32', '%bb.33', '%bb.34', '%bb.35', '%bb.36', '%bb.37', '%bb.38', '%bb.39', '%bb.40', '%bb.41' ]
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $x10
+    %0:gpr = COPY $x10
+    %1:gpr = PseudoMovAddr target-flags(riscv-hi) %jump-table.0, target-flags(riscv-lo) %jump-table.0
+    PseudoBR %bb.1
+
+  bb.1:
+    successors: %bb.2, %bb.3, %bb.4, %bb.5, %bb.6, %bb.7, %bb.8, %bb.9, %bb.10, %bb.11, %bb.12, %bb.13, %bb.14, %bb.15, %bb.16, %bb.17, %bb.18, %bb.19, %bb.20, %bb.21, %bb.22, %bb.23, %bb.24, %bb.25, %bb.26, %bb.27, %bb.28, %bb.29, %bb.30, %bb.31, %bb.32, %bb.33, %bb.34, %bb.35, %bb.36, %bb.37, %bb.38, %bb.39, %bb.40, %bb.41
+    %2:gpr = ADDI $x0, 2
+    %3:gpr = SH2ADD %0, %1
+    %4:gprjalrnonx7 = LW %3, 0 :: (load (s32) from jump-table)
+    PseudoBRIND %4, 0
+
+  bb.2:
+    successors:
+    %5:gpr = PHI %2, %bb.1, %6, %bb.42
+    $x10 = COPY %5
+    PseudoRET implicit $x10
+
+  bb.3:
+    successors:
+    %7:gpr = PHI %2, %bb.1, %2, %bb.43
+    $x10 = COPY %7
+    PseudoRET implicit $x10
+
+  bb.4:
+    successors: %bb.42
+    PseudoBR %bb.42
+
+  bb.5:
+    successors: %bb.43
+    PseudoBR %bb.43
+
+  bb.6:
+    successors:
+    PseudoRET
+
+  bb.7:
+    successors:
+    PseudoRET
+
+  bb.8:
+    successors:
+    PseudoRET
+
+  bb.9:
+    successors:
+    PseudoRET
+
+  bb.10:
+    successors:
+    PseudoRET
+
+  bb.11:
+    successors:
+    PseudoRET
+
+  bb.12:
+    successors:
+    PseudoRET
+
+  bb.13:
+    successors:
+    PseudoRET
+
+  bb.14:
+    successors:
+    PseudoRET
+
+  bb.15:
+    successors:
+    PseudoRET
+
+  bb.16:
+    successors:
+    PseudoRET
+
+  bb.17:
+    successors:
+    PseudoRET
+
+  bb.18:
+    successors:
+    PseudoRET
+
+  bb.19:
+    successors:
+    PseudoRET
+
+  bb.20:
+    successors:
+    PseudoRET
+
+  bb.21:
+    successors:
+    PseudoRET
+
+  bb.22:
+    successors:
+    PseudoRET
+
+  bb.23:
+    successors:
+    PseudoRET
+
+  bb.24:
+    successors:
+    PseudoRET
+
+  bb.25:
+    successors:
+    PseudoRET
+
+  bb.26:
+    successors:
+    PseudoRET
+
+  bb.27:
+    successors:
+    PseudoRET
+
+  bb.28:
+    successors:
+    PseudoRET
+
+  bb.29:
+    successors:
+    PseudoRET
+
+  bb.30:
+    successors:
+    PseudoRET
+
+  bb.31:
+    successors:
+    PseudoRET
+
+  bb.32:
+    successors:
+    PseudoRET
+
+  bb.33:
+    successors:
+    PseudoRET
+
+  bb.34:
+    successors:
+    PseudoRET
+
+  bb.35:
+    successors:
+    PseudoRET
+
+  bb.36:
+    successors:
+    PseudoRET
+
+  bb.37:
+    successors:
+    PseudoRET
+
+  bb.38:
+    successors:
+    PseudoRET
+
+  bb.39:
+    successors:
+    PseudoRET
+
+  bb.40:
+    successors:
+    PseudoRET
+
+  bb.41:
+    successors:
+    PseudoRET
+
+  bb.42:
+    successors: %bb.2
+    %6:gpr = ADDI $x0, 7
+    PseudoBR %bb.2
+
+  bb.43:
+    successors: %bb.3
+    PseudoBR %bb.3
+...
