@@ -113,23 +113,9 @@ static cl::opt<unsigned> SinkIntoCycleLimit(
         "The maximum number of instructions considered for cycle sinking."),
     cl::init(50), cl::Hidden);
 
-static cl::opt<unsigned> PHIEdgeRematFreqRatio(
-    "machine-sink-phi-edge-remat-freq-ratio",
-    cl::desc("Rematerialize a def into the PHI edges that use it when its "
-             "block is more than this many times hotter than those edges "
-             "combined (0 disables)"),
-    cl::init(8), cl::Hidden);
-
-static cl::opt<unsigned> PHIEdgeRematMaxSites(
-    "machine-sink-phi-edge-remat-max-sites",
-    cl::desc("Maximum number of places to rematerialize a def into"),
-    cl::init(8), cl::Hidden);
-
 STATISTIC(NumSunk, "Number of machine instructions sunk");
 STATISTIC(NumCycleSunk, "Number of machine instructions sunk into a cycle");
 STATISTIC(NumSplit, "Number of critical edges split");
-STATISTIC(NumPHIEdgeRemat,
-          "Number of defs rematerialized into their PHI edges");
 STATISTIC(NumCoalesces, "Number of copies coalesced");
 STATISTIC(NumPostRACopySink, "Number of copies sunk after RA");
 
@@ -242,13 +228,6 @@ private:
 
   bool hasStoreBetween(MachineBasicBlock *From, MachineBasicBlock *To,
                        MachineInstr &MI);
-
-  /// Rematerialize trivially rematerializable defs whose every use is a PHI
-  /// operand on an out-edge of the defining block, into the edges that
-  /// actually consume them. See the comment on the implementation.
-  bool rematerializeAtPHIEdges(MachineFunction &MF);
-  bool tryRematerializeAtPHIEdges(MachineInstr &MI,
-                                  MachineDomTreeUpdater &MDTU);
 
   /// Postpone the splitting of the given critical
   /// edge (\p From, \p To).
@@ -864,162 +843,6 @@ bool MachineSinkingLegacy::runOnMachineFunction(MachineFunction &MF) {
   return Impl.run(MF);
 }
 
-/// Try to move \p MI out of its block and into the edges that consume it.
-///
-/// The ordinary sinking path can only move a def into a single successor that
-/// dominates all of its uses. That is no help for a def whose uses are PHI
-/// operands spread over several successors of a high fan-out block -- a jump
-/// table's dispatch block being the motivating case -- where no single
-/// successor dominates them and the def is stuck paying for every path through
-/// the block while only a few of them need it.
-///
-/// When the def is trivially rematerializable there is no need to move it at
-/// all: each PHI operand names one specific out-edge, so each can be given its
-/// own private copy of the computation and the original deleted.
-bool MachineSinking::tryRematerializeAtPHIEdges(MachineInstr &MI,
-                                                MachineDomTreeUpdater &MDTU) {
-  MachineBasicBlock *MBB = MI.getParent();
-
-  // A single virtual def, so there is exactly one value to replace.
-  if (MI.getNumDefs() != 1 || MI.getNumExplicitDefs() != 1)
-    return false;
-  const MachineOperand &DefMO = MI.getOperand(0);
-  if (!DefMO.isReg() || !DefMO.getReg().isVirtual() || DefMO.getSubReg())
-    return false;
-  Register Reg = DefMO.getReg();
-
-  if (MI.isNotDuplicable() || !TII->isTriviallyReMaterializable(MI))
-    return false;
-
-  // Every use has to be a PHI operand. That is what makes the rewrite
-  // trivially correct: an operand names one specific incoming edge, so it can
-  // be handed a copy placed on that edge without affecting any other path.
-  //
-  // Uses split into two kinds. Those arriving on an edge out of this block are
-  // the ones costing us: they force the def to stay here. Those arriving from
-  // some other predecessor do not, but they still pin the def down, so they
-  // have to be rewritten too before it can be deleted.
-  SmallSetVector<MachineBasicBlock *, 4> OwnEdgeTargets;
-  SmallSetVector<MachineBasicBlock *, 4> OtherPreds;
-  for (MachineOperand &MO : MRI->use_nodbg_operands(Reg)) {
-    MachineInstr *UseMI = MO.getParent();
-    if (!UseMI->isPHI())
-      return false;
-    MachineBasicBlock *Pred = UseMI->getOperand(MO.getOperandNo() + 1).getMBB();
-    if (Pred == MBB) {
-      if (!MBB->isSuccessor(UseMI->getParent()))
-        return false;
-      OwnEdgeTargets.insert(UseMI->getParent());
-    } else {
-      OtherPreds.insert(Pred);
-    }
-  }
-
-  // Nothing to gain unless the def is actually pinned here by its own edges,
-  // and nothing to gain if every path out of the block wants it anyway.
-  if (OwnEdgeTargets.empty() || OwnEdgeTargets.size() >= MBB->succ_size())
-    return false;
-  unsigned NumSites = OwnEdgeTargets.size() + OtherPreds.size();
-  if (NumSites > PHIEdgeRematMaxSites)
-    return false;
-
-  // Only worth duplicating when this block really is much hotter than the
-  // places the value is consumed. Without frequencies we cannot tell.
-  if (!MBFI || !PHIEdgeRematFreqRatio)
-    return false;
-  uint64_t UseFreq = 0;
-  for (MachineBasicBlock *B : OwnEdgeTargets)
-    UseFreq = SaturatingAdd(UseFreq, MBFI->getBlockFreq(B).getFrequency());
-  for (MachineBasicBlock *B : OtherPreds)
-    UseFreq = SaturatingAdd(UseFreq, MBFI->getBlockFreq(B).getFrequency());
-  if (MBFI->getBlockFreq(MBB).getFrequency() <=
-      SaturatingMultiply(UseFreq, uint64_t(PHIEdgeRematFreqRatio)))
-    return false;
-
-  // Check every edge up front so this is never applied partially. Only real
-  // critical edges are handled: a target with a single predecessor is the case
-  // ordinary sinking already covers.
-  for (MachineBasicBlock *T : OwnEdgeTargets)
-    if (T->pred_size() < 2 || !MBB->canSplitCriticalEdge(T, MLI))
-      return false;
-
-  LLVM_DEBUG(dbgs() << "Rematerializing into " << NumSites << " site(s) out of "
-                    << printMBBReference(*MBB) << ": " << MI);
-
-  auto cloneInto = [&](MachineBasicBlock *BB,
-                       MachineBasicBlock::iterator At) -> Register {
-    Register NewReg = MRI->createVirtualRegister(MRI->getRegClass(Reg));
-    MachineInstr *NewMI = MBB->getParent()->CloneMachineInstr(&MI);
-    NewMI->getOperand(0).setReg(NewReg);
-    BB->insert(At, NewMI);
-    return NewReg;
-  };
-
-  // Rewrite every PHI operand that reads Reg on the edge out of \p Pred.
-  auto rewriteOperandsFrom = [&](MachineBasicBlock *Pred, Register NewReg) {
-    for (MachineBasicBlock *Succ : Pred->successors())
-      for (MachineInstr &PHI : Succ->phis())
-        for (unsigned I = 1, E = PHI.getNumOperands(); I != E; I += 2)
-          if (PHI.getOperand(I).isReg() && PHI.getOperand(I).getReg() == Reg &&
-              PHI.getOperand(I + 1).getMBB() == Pred)
-            PHI.getOperand(I).setReg(NewReg);
-  };
-
-  // Uses on this block's own out-edges: a PHI operand is live on its edge, so
-  // the copy has to sit on the edge itself.
-  bool Changed = false;
-  for (MachineBasicBlock *T : OwnEdgeTargets) {
-    MachineBasicBlock *NewBB =
-        MBB->SplitCriticalEdge(T, {LIS, SI, LV, MLI}, nullptr, &MDTU);
-    if (!NewBB) {
-      // canSplitCriticalEdge only promises success if nothing changed in the
-      // meantime, and splitting an earlier edge is such a change. Stop here;
-      // what has been rewritten so far is self-consistent, the original def
-      // just stays alive for the uses that were not reached.
-      return Changed;
-    }
-    MBFI->onEdgeSplit(*MBB, *NewBB, *MBPI);
-    CI->splitCriticalEdge(MBB, T, NewBB);
-    ++NumSplit;
-    rewriteOperandsFrom(NewBB, cloneInto(NewBB, NewBB->getFirstTerminator()));
-    Changed = true;
-  }
-
-  // Uses arriving from elsewhere: a copy at the end of that predecessor is
-  // available on all of its out-edges, which is all the PHI needs.
-  for (MachineBasicBlock *P : OtherPreds)
-    rewriteOperandsFrom(P, cloneInto(P, P->getFirstTerminator()));
-
-  assert(MRI->use_nodbg_empty(Reg) && "Rematerialization left a use behind");
-  MI.eraseFromParent();
-  ++NumPHIEdgeRemat;
-  return true;
-}
-
-/// Pre-pass over the function looking for defs worth rematerializing into the
-/// PHI edges that use them, rather than leaving them in a much hotter block.
-bool MachineSinking::rematerializeAtPHIEdges(MachineFunction &MF) {
-  if (!MBFI || !PHIEdgeRematFreqRatio)
-    return false;
-
-  bool Changed = false;
-  MachineDomTreeUpdater MDTU(DT, PDT,
-                             MachineDomTreeUpdater::UpdateStrategy::Lazy);
-  for (MachineBasicBlock &MBB : MF) {
-    // A def can only be pinned here by its own out-edges if there is more
-    // than one of them; the ratio check below does the real filtering.
-    if (MBB.succ_size() < 2)
-      continue;
-    SmallVector<MachineInstr *, 8> Candidates;
-    for (MachineInstr &MI : MBB)
-      if (!MI.isPHI() && !MI.isTerminator() && !MI.isDebugInstr())
-        Candidates.push_back(&MI);
-    for (MachineInstr *MI : Candidates)
-      Changed |= tryRematerializeAtPHIEdges(*MI, MDTU);
-  }
-  return Changed;
-}
-
 bool MachineSinking::run(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "******** Machine Sinking ********\n");
 
@@ -1031,10 +854,7 @@ bool MachineSinking::run(MachineFunction &MF) {
   bool EverMadeChange = false;
 
   while (true) {
-    // Run inside the loop rather than before it: a def often has to be sunk
-    // into the high fan-out block by ordinary sinking before its uses look
-    // like PHI operands on that block's own out-edges.
-    bool MadeChange = rematerializeAtPHIEdges(MF);
+    bool MadeChange = false;
 
     // Process all basic blocks.
     CEBCandidates.clear();
