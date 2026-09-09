@@ -1,0 +1,306 @@
+# RUN: llc -mtriple=riscv64 -mattr=+zba -run-pass=machine-sink \
+# RUN:     -verify-machineinstrs -o - %s | FileCheck %s
+# RUN: llc -mtriple=riscv64 -mattr=+zba -run-pass=machine-sink \
+# RUN:     -verify-machineinstrs -machine-sink-phi-edge-remat-max-sites=0 \
+# RUN:     -o - %s | FileCheck %s --check-prefix=DISABLED
+# RUN: llc -mtriple=riscv64 -mattr=+zba -run-pass=machine-sink \
+# RUN:     -verify-machineinstrs -machine-sink-phi-edge-remat-freq-ratio=0 \
+# RUN:     -o - %s | FileCheck %s --check-prefix=DISABLED
+# RUN: llc -mtriple=riscv64 -mattr=+zba -run-pass=machine-sink \
+# RUN:     -verify-machineinstrs -machine-sink-split=false \
+# RUN:     -o - %s | FileCheck %s --check-prefix=NOSPLIT
+
+# A trivially rematerializable def in a 40-way jump-table block whose only uses
+# are PHI operands on a few specific edges. Ordinary sinking cannot help: no
+# single successor dominates all the uses, so the def stays put and every
+# dispatch pays for it while only a few paths need it.
+#
+# The dispatch block is 40 times hotter than any one of the sites that consume
+# the value, which is what -machine-sink-phi-edge-remat-freq-ratio asks for.
+#
+# %2 is consumed on two of the block's own out-edges (into %bb.2 and %bb.3,
+# both of which have another predecessor, so both edges are critical), and also
+# on two edges that do not leave this block at all: %bb.43 -> %bb.3 and the
+# exception edge %bb.43 -> %bb.44. Those two do not cost anything, but they
+# still pin the def down, so all four have to be rewritten before %2 can go.
+#
+# %8 has the same shape but is an IMPLICIT_DEF, which emits nothing. Cloning it
+# would have real edges split to move an instruction that costs nothing, so it
+# is left alone.
+
+# The dispatch block should be left holding only the table lookup and branch,
+# plus the IMPLICIT_DEF it was never worth touching.
+# CHECK:      bb.1:
+# CHECK-NOT:    ADDI $x0, 2
+# CHECK:        %3:gpr = IMPLICIT_DEF
+# CHECK-NEXT:   %4:gpr = SH2ADD %0, %1
+# CHECK-NEXT:   %5:gprjalrnonx7 = LW %4, 0 :: (load (s32) from jump-table)
+# CHECK-NEXT:   PseudoBRIND %5, 0
+#
+# Sinking split the two critical edges and moved a clone onto each. The
+# IMPLICIT_DEF is still read straight out of %bb.1 by both PHIs.
+# CHECK:      bb.[[#SPLIT1:]]:
+# CHECK:        %[[R1:[0-9]+]]:gpr = ADDI $x0, 2
+# CHECK:      bb.[[#SPLIT2:]]:
+# CHECK:        %[[R2:[0-9]+]]:gpr = ADDI $x0, 2
+# CHECK:      bb.2:
+# CHECK:        PHI %[[R1]], %bb.[[#SPLIT1]], %7, %bb.42
+# CHECK-NEXT:   PHI %3, %bb.[[#SPLIT1]], %7, %bb.42
+# CHECK:      bb.3:
+# CHECK:        PHI %[[R2]], %bb.[[#SPLIT2]], %[[R3:[0-9]+]], %bb.[[#SPLIT3:]]
+# CHECK-NEXT:   PHI %3, %bb.[[#SPLIT2]], %[[R3]], %bb.[[#SPLIT3]]
+#
+# And the copy for the edges that come from somewhere else entirely, which
+# sinking cannot reach because %bb.43 is not a successor of the defining block.
+# It has to go before the call, not at the first terminator: the exception edge
+# to the landing pad leaves from the call, so a copy after it would not be there
+# on the path that needs it. One copy covers both edges out of %bb.43, because
+# the one placed for the other edge is merged into it.
+# CHECK:      bb.43:
+# CHECK:        %[[R3]]:gpr = ADDI $x0, 2
+# CHECK-NEXT:   PseudoCALL
+# CHECK:      bb.44 (landing-pad):
+# CHECK-NEXT:   PHI %[[R3]], %bb.43
+
+# With the transform disabled the def stays where it was.
+# DISABLED:      bb.1:
+# DISABLED:        %2:gpr = ADDI $x0, 2
+# DISABLED-NEXT:   %3:gpr = IMPLICIT_DEF
+# DISABLED-NEXT:   %4:gpr = SH2ADD %0, %1
+
+# When the edges cannot be split, nothing moved, so every clone is merged back
+# and the function is left exactly as it started: one ADDI in %bb.1 read on all
+# four edges, and nothing added to %bb.43. The copies made there are merged back
+# too, because %bb.1 still holds one that dominates them.
+# NOSPLIT:      bb.1:
+# NOSPLIT:        %[[M:[0-9]+]]:gpr = ADDI $x0, 2
+# NOSPLIT-NOT:    ADDI $x0, 2
+# NOSPLIT:        %4:gpr = SH2ADD %0, %1
+# NOSPLIT:      bb.2:
+# NOSPLIT:        PHI %[[M]], %bb.1, %7, %bb.42
+# NOSPLIT:      bb.3:
+# NOSPLIT:        PHI %[[M]], %bb.1, %[[M]], %bb.43
+# NOSPLIT:      bb.43:
+# NOSPLIT-NEXT:   successors: %bb.3
+# NOSPLIT-NEXT:   {{^ *$}}
+# NOSPLIT-NEXT:   PseudoCALL
+# NOSPLIT-NEXT:   PseudoBR %bb.3
+# NOSPLIT:      bb.44 (landing-pad):
+# NOSPLIT-NEXT:   PHI %[[M]], %bb.43
+
+--- |
+  target triple = "riscv64-unknown-linux-gnu"
+  declare void @g()
+  declare i32 @__gxx_personality_v0(...)
+  define void @remat_phi_edges(i64 %idx) personality ptr @__gxx_personality_v0 {
+    ret void
+  }
+...
+---
+name:            remat_phi_edges
+tracksRegLiveness: true
+jumpTable:
+  kind:            custom32
+  entries:
+    - id:              0
+      blocks:          [ '%bb.2', '%bb.3', '%bb.4', '%bb.5', '%bb.6', '%bb.7', '%bb.8', '%bb.9', '%bb.10', '%bb.11', '%bb.12', '%bb.13', '%bb.14', '%bb.15', '%bb.16', '%bb.17', '%bb.18', '%bb.19', '%bb.20', '%bb.21', '%bb.22', '%bb.23', '%bb.24', '%bb.25', '%bb.26', '%bb.27', '%bb.28', '%bb.29', '%bb.30', '%bb.31', '%bb.32', '%bb.33', '%bb.34', '%bb.35', '%bb.36', '%bb.37', '%bb.38', '%bb.39', '%bb.40', '%bb.41' ]
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $x10
+    %0:gpr = COPY $x10
+    %1:gpr = PseudoMovAddr target-flags(riscv-hi) %jump-table.0, target-flags(riscv-lo) %jump-table.0
+    PseudoBR %bb.1
+
+  bb.1:
+    successors: %bb.2, %bb.3, %bb.4, %bb.5, %bb.6, %bb.7, %bb.8, %bb.9, %bb.10, %bb.11, %bb.12, %bb.13, %bb.14, %bb.15, %bb.16, %bb.17, %bb.18, %bb.19, %bb.20, %bb.21, %bb.22, %bb.23, %bb.24, %bb.25, %bb.26, %bb.27, %bb.28, %bb.29, %bb.30, %bb.31, %bb.32, %bb.33, %bb.34, %bb.35, %bb.36, %bb.37, %bb.38, %bb.39, %bb.40, %bb.41
+    %2:gpr = ADDI $x0, 2
+    %8:gpr = IMPLICIT_DEF
+    %3:gpr = SH2ADD %0, %1
+    %4:gprjalrnonx7 = LW %3, 0 :: (load (s32) from jump-table)
+    PseudoBRIND %4, 0
+
+  bb.2:
+    successors:
+    %5:gpr = PHI %2, %bb.1, %6, %bb.42
+    %9:gpr = PHI %8, %bb.1, %6, %bb.42
+    $x10 = COPY %5
+    $x11 = COPY %9
+    PseudoRET implicit $x10, implicit $x11
+
+  bb.3:
+    successors:
+    %7:gpr = PHI %2, %bb.1, %2, %bb.43
+    %10:gpr = PHI %8, %bb.1, %2, %bb.43
+    $x10 = COPY %7
+    $x11 = COPY %10
+    PseudoRET implicit $x10, implicit $x11
+
+  bb.4:
+    successors: %bb.42
+    PseudoBR %bb.42
+
+  bb.5:
+    successors: %bb.43
+    PseudoBR %bb.43
+
+  bb.6:
+    successors:
+    PseudoRET
+
+  bb.7:
+    successors:
+    PseudoRET
+
+  bb.8:
+    successors:
+    PseudoRET
+
+  bb.9:
+    successors:
+    PseudoRET
+
+  bb.10:
+    successors:
+    PseudoRET
+
+  bb.11:
+    successors:
+    PseudoRET
+
+  bb.12:
+    successors:
+    PseudoRET
+
+  bb.13:
+    successors:
+    PseudoRET
+
+  bb.14:
+    successors:
+    PseudoRET
+
+  bb.15:
+    successors:
+    PseudoRET
+
+  bb.16:
+    successors:
+    PseudoRET
+
+  bb.17:
+    successors:
+    PseudoRET
+
+  bb.18:
+    successors:
+    PseudoRET
+
+  bb.19:
+    successors:
+    PseudoRET
+
+  bb.20:
+    successors:
+    PseudoRET
+
+  bb.21:
+    successors:
+    PseudoRET
+
+  bb.22:
+    successors:
+    PseudoRET
+
+  bb.23:
+    successors:
+    PseudoRET
+
+  bb.24:
+    successors:
+    PseudoRET
+
+  bb.25:
+    successors:
+    PseudoRET
+
+  bb.26:
+    successors:
+    PseudoRET
+
+  bb.27:
+    successors:
+    PseudoRET
+
+  bb.28:
+    successors:
+    PseudoRET
+
+  bb.29:
+    successors:
+    PseudoRET
+
+  bb.30:
+    successors:
+    PseudoRET
+
+  bb.31:
+    successors:
+    PseudoRET
+
+  bb.32:
+    successors:
+    PseudoRET
+
+  bb.33:
+    successors:
+    PseudoRET
+
+  bb.34:
+    successors:
+    PseudoRET
+
+  bb.35:
+    successors:
+    PseudoRET
+
+  bb.36:
+    successors:
+    PseudoRET
+
+  bb.37:
+    successors:
+    PseudoRET
+
+  bb.38:
+    successors:
+    PseudoRET
+
+  bb.39:
+    successors:
+    PseudoRET
+
+  bb.40:
+    successors:
+    PseudoRET
+
+  bb.41:
+    successors:
+    PseudoRET
+
+  bb.42:
+    successors: %bb.2
+    %6:gpr = ADDI $x0, 7
+    PseudoBR %bb.2
+
+  bb.43:
+    successors: %bb.3(0x7ffff800), %bb.44(0x00000800)
+    PseudoCALL target-flags(riscv-call) @g, csr_ilp32_lp64, implicit-def dead $x1, implicit-def $x2, implicit $x2
+    PseudoBR %bb.3
+
+  bb.44 (landing-pad):
+    successors:
+    %11:gpr = PHI %2, %bb.43
+    $x10 = COPY %11
+    PseudoRET implicit $x10
+...

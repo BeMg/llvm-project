@@ -16,6 +16,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/MachineSink.h"
+#include "PHIEliminationUtils.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/MapVector.h"
@@ -60,6 +61,7 @@
 #include "llvm/Support/BranchProbability.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <cstdint>
@@ -113,9 +115,27 @@ static cl::opt<unsigned> SinkIntoCycleLimit(
         "The maximum number of instructions considered for cycle sinking."),
     cl::init(50), cl::Hidden);
 
+static cl::opt<unsigned> PHIEdgeRematFreqRatio(
+    "machine-sink-phi-edge-remat-freq-ratio",
+    cl::desc("Clone a rematerializable def into the PHI edges that use it when "
+             "its block is more than this many times hotter than those edges "
+             "combined (0 disables)"),
+    cl::init(8), cl::Hidden);
+
+static cl::opt<unsigned> PHIEdgeRematMaxSites(
+    "machine-sink-phi-edge-remat-max-sites",
+    cl::desc("Maximum number of places to clone a rematerializable def into "
+             "when its uses are PHI operands on several out-edges (0 "
+             "disables)"),
+    cl::init(8), cl::Hidden);
+
 STATISTIC(NumSunk, "Number of machine instructions sunk");
 STATISTIC(NumCycleSunk, "Number of machine instructions sunk into a cycle");
 STATISTIC(NumSplit, "Number of critical edges split");
+STATISTIC(NumPHIEdgeRemat,
+          "Number of defs rematerialized into their PHI edges");
+STATISTIC(NumPHIEdgeRematMerged,
+          "Number of rematerialized defs merged back into their block");
 STATISTIC(NumCoalesces, "Number of copies coalesced");
 STATISTIC(NumPostRACopySink, "Number of copies sunk after RA");
 
@@ -196,6 +216,11 @@ class MachineSinking {
   DenseMap<const MachineBasicBlock *, std::vector<unsigned>>
       CachedRegisterPressure;
 
+  /// Clones created by cloneDefsPerPHIEdge(), one group per def it replaced.
+  /// Held by register so that the entries stay valid however sinking moves the
+  /// instructions afterwards.
+  SmallVector<SmallVector<Register, 4>, 8> PHIEdgeClones;
+
   bool EnableSinkAndFold;
 
 public:
@@ -228,6 +253,21 @@ private:
 
   bool hasStoreBetween(MachineBasicBlock *From, MachineBasicBlock *To,
                        MachineInstr &MI);
+
+  /// The PHI edge a clone serves: the block the value arrives from and the
+  /// block whose PHIs read it. Mapped to the register the clone defines.
+  using PHIEdge = std::pair<MachineBasicBlock *, MachineBasicBlock *>;
+  using PHIEdgeSites = SmallMapVector<PHIEdge, Register, 4>;
+
+  /// Clone trivially rematerializable defs whose every use is a PHI operand
+  /// into the sites that consume them, so that ordinary sinking has one
+  /// movable def per successor.
+  bool cloneDefsPerPHIEdge(MachineFunction &MF);
+  bool tryCloneDefPerPHIEdge(MachineInstr &MI);
+  void replaceDefWithPHIEdgeClones(MachineInstr &MI, PHIEdgeSites &Sites);
+
+  /// Merge back the clones above that sinking declined to move.
+  bool removeRedundantClones();
 
   /// Postpone the splitting of the given critical
   /// edge (\p From, \p To).
@@ -843,6 +883,243 @@ bool MachineSinkingLegacy::runOnMachineFunction(MachineFunction &MF) {
   return Impl.run(MF);
 }
 
+/// Give \p MI a private copy for each PHI edge that uses it.
+///
+/// Ordinary sinking can only move a def into a single successor that dominates
+/// all of its uses. That is no help for a def whose uses are PHI operands
+/// spread over several successors of a high fan-out block -- a jump table's
+/// dispatch block being the motivating case. No successor dominates them all,
+/// so the def stays put and every path through the block pays for it while
+/// only a few of them need it.
+///
+/// When the def is trivially rematerializable it does not have to move at all:
+/// each PHI operand names one specific incoming edge, so each can be handed its
+/// own private copy and the original deleted. Nothing is moved here -- one
+/// clone per consuming successor is exactly the shape AllUsesDominatedByBlock()
+/// recognises as BreakPHIEdge, so the sinking below picks the clones up and
+/// splits the edges itself. Whatever it declines to move is merged back by
+/// removeRedundantClones().
+bool MachineSinking::tryCloneDefPerPHIEdge(MachineInstr &MI) {
+  MachineBasicBlock *MBB = MI.getParent();
+
+  // Exactly one def, and it is a whole virtual register, so there is a single
+  // value to replace. Both counts matter: the explicit one puts the def at
+  // operand 0, the total one rules out an implicit def that erasing MI would
+  // drop. Neither implies operand 0 really is a register, though: a variadic
+  // instruction whose descriptor declares a def can be built without one, as a
+  // void-returning PATCHPOINT is, and then operand 0 is its ID immediate.
+  if (MI.getNumDefs() != 1 || MI.getNumExplicitDefs() != 1)
+    return false;
+  const MachineOperand &DefMO = MI.getOperand(0);
+  if (!DefMO.isReg() || !DefMO.getReg().isVirtual() || DefMO.getSubReg())
+    return false;
+  if (MI.isNotDuplicable() || !TII->isTriviallyReMaterializable(MI))
+    return false;
+  Register Reg = DefMO.getReg();
+
+  // Every use has to be a PHI operand. That is what makes the rewrite trivially
+  // correct: an operand names one specific incoming edge, so it can be handed a
+  // copy on that edge without affecting any other path.
+  //
+  // One site per edge, so that a clone always serves the PHIs of a single
+  // block: AllUsesDominatedByBlock() only sets BreakPHIEdge when every use is a
+  // PHI in one block, so two PHIs in one successor have to share a clone.
+  PHIEdgeSites Sites;
+  bool AnyOwnEdge = false;
+  for (MachineOperand &MO : MRI->use_nodbg_operands(Reg)) {
+    MachineInstr *PHI = MO.getParent();
+    if (!PHI->isPHI())
+      return false;
+    MachineBasicBlock *Pred = PHI->getOperand(MO.getOperandNo() + 1).getMBB();
+    Sites.try_emplace(PHIEdge(Pred, PHI->getParent()));
+    AnyOwnEdge |= Pred == MBB;
+  }
+
+  // Uses arriving from some other predecessor cost nothing here, they only pin
+  // the def down, so there is nothing to gain unless an edge out of this block
+  // uses it too.
+  if (!AnyOwnEdge)
+    return false;
+
+  // Fewer than two sites means this would replace the def with a single clone,
+  // and the pre-pass runs every trip round the main loop, so it would do so
+  // forever. With the check, every clone this makes has exactly one site and so
+  // is never reconsidered.
+  if (Sites.size() < 2 || Sites.size() > PHIEdgeRematMaxSites)
+    return false;
+
+  // Only worth duplicating when this block really is much hotter than the
+  // blocks that end up holding the clones. The shape alone is far too common to
+  // act on: any branch whose successors read a constant through a PHI matches
+  // it. A block counts once however many sites it holds, because clones sharing
+  // a block are identical and removeRedundantClones() folds them into one.
+  uint64_t UseFreq = 0;
+  SmallPtrSet<MachineBasicBlock *, 4> Counted;
+  for (auto [Pred, Succ] : Sites.keys())
+    if (MachineBasicBlock *Site = Pred == MBB ? Succ : Pred;
+        Counted.insert(Site).second)
+      UseFreq = SaturatingAdd(UseFreq, MBFI->getBlockFreq(Site).getFrequency());
+  if (MBFI->getBlockFreq(MBB).getFrequency() <=
+      SaturatingMultiply(UseFreq, uint64_t(PHIEdgeRematFreqRatio)))
+    return false;
+
+  replaceDefWithPHIEdgeClones(MI, Sites);
+  return true;
+}
+
+/// Replace \p MI with one clone of it per site in \p Sites, and point the uses
+/// at the clone serving the edge each of them names. The register every clone
+/// defines is recorded in \p Sites as it is made.
+///
+/// At least one site has to be an edge out of MI's own block, so that the debug
+/// users left behind have a clone at MI's position to follow.
+void MachineSinking::replaceDefWithPHIEdgeClones(MachineInstr &MI,
+                                                 PHIEdgeSites &Sites) {
+  LLVM_DEBUG(dbgs() << "Cloning into " << Sites.size() << " site(s) out of "
+                    << printMBBReference(*MI.getParent()) << ": " << MI);
+
+  MachineBasicBlock *MBB = MI.getParent();
+  MachineFunction &MF = *MBB->getParent();
+  Register Reg = MI.getOperand(0).getReg();
+  const TargetRegisterClass *RC = MRI->getRegClass(Reg);
+  SmallVector<Register, 4> &Group = PHIEdgeClones.emplace_back();
+  Register LocalReg;
+  for (auto &[E, CloneReg] : Sites) {
+    auto [Pred, Succ] = E;
+    CloneReg = MRI->createVirtualRegister(RC);
+    MachineInstr *Clone = MF.CloneMachineInstr(&MI);
+    Clone->getOperand(0).setReg(CloneReg);
+    Group.push_back(CloneReg);
+
+    // A clone for one of this block's own out-edges stays here for now; sinking
+    // is what moves it onto the edge, once the uses that kept it from doing so
+    // belong to a different vreg.
+    if (Pred == MBB) {
+      MBB->insert(MI.getIterator(), Clone);
+      LocalReg = CloneReg;
+      continue;
+    }
+
+    // Sinking cannot help an edge coming from elsewhere -- it cannot push a def
+    // into a block that is not a successor -- so that clone goes into the
+    // predecessor the edge leaves from. Where in the predecessor is not a free
+    // choice: an edge to a landing pad leaves from the call, and an edge to an
+    // indirect target leaves from the INLINEASM_BR, both of which sit before
+    // the terminators. findPHICopyInsertPoint() is what PHI elimination uses to
+    // place its own copies for exactly this reason. The clone has no def in the
+    // predecessor yet, which is what makes passing its register meaningful.
+    Pred->insert(findPHICopyInsertPoint(Pred, Succ, CloneReg), Clone);
+  }
+
+  // Each use names one incoming edge, so it just has to be pointed at the clone
+  // covering that edge.
+  for (MachineOperand &MO :
+       llvm::make_early_inc_range(MRI->use_nodbg_operands(Reg))) {
+    MachineInstr *PHI = MO.getParent();
+    Register CloneReg = Sites.lookup(PHIEdge(
+        PHI->getOperand(MO.getOperandNo() + 1).getMBB(), PHI->getParent()));
+    assert(CloneReg.isValid() && "Every use was collected as a site above");
+    MO.setReg(CloneReg);
+  }
+
+  // MI is about to go, so its debug users have to follow something. A clone
+  // sitting at MI's own position dominates exactly what MI dominated.
+  assert(LocalReg.isValid() && "No clone was left at MI's own position");
+  for (MachineOperand &MO : llvm::make_early_inc_range(MRI->use_operands(Reg)))
+    MO.setReg(LocalReg);
+
+  MI.eraseFromParent();
+  ++NumPHIEdgeRemat;
+}
+
+/// Pre-pass over the function looking for defs worth cloning into the PHI edges
+/// that use them, rather than leaving them in a much hotter block.
+bool MachineSinking::cloneDefsPerPHIEdge(MachineFunction &MF) {
+  // Without frequencies there is no way to tell a hot block from a cold one,
+  // and the shape alone is not enough to act on.
+  if (!MBFI || !PHIEdgeRematMaxSites || !PHIEdgeRematFreqRatio)
+    return false;
+
+  bool Changed = false;
+  for (MachineBasicBlock &MBB : MF) {
+    if (MBB.succ_size() <= 1)
+      continue;
+    for (MachineInstr &MI : llvm::make_early_inc_range(MBB)) {
+      // Meta instructions cover the debug ones, and also IMPLICIT_DEF, which
+      // is trivially rematerializable and would otherwise have real blocks and
+      // branches created for it to sink into while emitting nothing itself.
+      if (MI.isPHI() || MI.isTerminator() || MI.isMetaInstruction())
+        continue;
+      Changed |= tryCloneDefPerPHIEdge(MI);
+    }
+  }
+  return Changed;
+}
+
+/// Merge back the clones tryCloneDefPerPHIEdge() made that sinking then
+/// declined to move.
+///
+/// Clones of one def are considered together, and one is dropped in favour of
+/// another whenever that other dominates it. The survivor does not move, so
+/// this only ever deletes an instruction -- nothing is made to run anywhere it
+/// did not already run. Which is also why dominance is the whole rule: a clone
+/// that another one reaches is buying nothing, whether it stayed where it was
+/// made or sinking put it there.
+///
+/// What that comes to in practice is that sinking taking nothing undoes the
+/// whole thing. The clones left behind all sit at the position the def held, so
+/// the first swallows the rest, and it dominates every other predecessor an
+/// edge use came from, so it swallows those copies too, leaving the one def the
+/// function started with. Clones sinking did move land past every sibling, so a
+/// win is kept.
+///
+/// A general "merge identical rematerializable defs in a block" rule would be a
+/// second MachineCSE running over every block, and MachineCSE has just run: the
+/// duplicates it chose to leave alone are none of this pass's business.
+bool MachineSinking::removeRedundantClones() {
+  bool Changed = false;
+  SmallVector<MachineInstr *, 8> Clones;
+  for (const SmallVector<Register, 4> &Group : PHIEdgeClones) {
+    // Find the clones of this def that are still around. Sinking may have moved
+    // them; it is where they are now that matters.
+    Clones.clear();
+    for (Register Reg : Group)
+      if (MachineInstr *Def = MRI->getUniqueVRegDef(Reg))
+        Clones.push_back(Def);
+
+    // Entries are cleared as clones are erased, so that one is never merged
+    // into another that has itself been merged away. Dominance is a partial
+    // order, so no two of them can absorb each other, and this settles on the
+    // clones that nothing else reaches.
+    for (unsigned I = 0, E = Clones.size(); I != E; ++I) {
+      MachineInstr *Later = Clones[I];
+      for (unsigned J = 0; J != E && Later; ++J) {
+        MachineInstr *Earlier = Clones[J];
+        if (I == J || !Earlier || !DT->dominates(Earlier, Later))
+          continue;
+
+        Register EarlierReg = Earlier->getOperand(0).getReg();
+        Register LaterReg = Later->getOperand(0).getReg();
+        if (MRI->getRegClass(EarlierReg) != MRI->getRegClass(LaterReg))
+          continue;
+
+        // Both are copies of the same def and the survivor dominates this one,
+        // so in SSA it reaches everything this one does. replaceRegWith brings
+        // the debug uses along.
+        LLVM_DEBUG(dbgs() << "Merging back PHI edge clone: " << *Later);
+        MRI->replaceRegWith(LaterReg, EarlierReg);
+        MRI->clearKillFlags(EarlierReg);
+        Later->eraseFromParent();
+        Clones[I] = nullptr;
+        Later = nullptr;
+        ++NumPHIEdgeRematMerged;
+        Changed = true;
+      }
+    }
+  }
+  return Changed;
+}
+
 bool MachineSinking::run(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "******** Machine Sinking ********\n");
 
@@ -852,6 +1129,7 @@ bool MachineSinking::run(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
 
   bool EverMadeChange = false;
+  PHIEdgeClones.clear();
 
   while (true) {
     bool MadeChange = false;
@@ -860,6 +1138,14 @@ bool MachineSinking::run(MachineFunction &MF) {
     CEBCandidates.clear();
     CEMergeCandidates.clear();
     ToSplit.clear();
+
+    // Give defs whose uses are PHI operands on several out-edges one clone per
+    // consuming site, so that the sinking below has a movable def per
+    // successor. Deliberately not folded into MadeChange: if sinking declines
+    // them all, another trip would find nothing, because every clone this makes
+    // has a single site and so is never reconsidered.
+    EverMadeChange |= cloneDefsPerPHIEdge(MF);
+
     for (auto &MBB : MF)
       MadeChange |= ProcessBlock(MBB);
 
@@ -949,6 +1235,13 @@ bool MachineSinking::run(MachineFunction &MF) {
         break;
     }
   }
+
+  // Undo the clones above that sinking declined to move. This has to be after
+  // the loop: inside it, cloneDefsPerPHIEdge() would clone again what this
+  // merges, forever. Note that both halves can report a change even when the
+  // function ends up as it started, because the def that survives the merge is
+  // a new instruction rather than the original.
+  EverMadeChange |= removeRedundantClones();
 
   HasStoreCache.clear();
   StoreInstrCache.clear();
