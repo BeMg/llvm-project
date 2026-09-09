@@ -16,6 +16,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/MachineSink.h"
+#include "PHIEliminationUtils.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/MapVector.h"
@@ -112,6 +113,13 @@ static cl::opt<unsigned> SinkIntoCycleLimit(
     cl::desc(
         "The maximum number of instructions considered for cycle sinking."),
     cl::init(50), cl::Hidden);
+
+static cl::opt<unsigned> PHIEdgeRematFreqRatio(
+    "machine-sink-phi-edge-remat-freq-ratio",
+    cl::desc("Clone a rematerializable def into the PHI edges that use it when "
+             "its block is more than this many times hotter than those edges "
+             "combined (0 disables)"),
+    cl::init(8), cl::Hidden);
 
 STATISTIC(NumSunk, "Number of machine instructions sunk");
 STATISTIC(NumCycleSunk, "Number of machine instructions sunk into a cycle");
@@ -228,6 +236,24 @@ private:
 
   bool hasStoreBetween(MachineBasicBlock *From, MachineBasicBlock *To,
                        MachineInstr &MI);
+
+  /// Clone trivially rematerializable defs whose every use is a PHI operand
+  /// into the sites that consume them, so that ordinary sinking has one
+  /// movable def per successor.
+  bool cloneDefsPerPHIEdge(MachineFunction &MF);
+  bool tryCloneDefPerPHIEdge(MachineInstr &MI);
+  /// Each site is the PHI edge a clone serves: the block the value arrives
+  /// from and the block whose PHIs read it, mapped to the use operands that
+  /// arrive on that edge.
+  using PHIEdgeSites =
+      SmallMapVector<std::pair<MachineBasicBlock *, MachineBasicBlock *>,
+                     SmallVector<MachineOperand *, 2>, 4>;
+  bool canSinkCloneOntoEdge(MachineInstr &MI, MachineBasicBlock *From,
+                            MachineBasicBlock *To);
+  bool isPHIEdgeRematProfitable(MachineBasicBlock *MBB,
+                                const PHIEdgeSites &Sites);
+  void replaceDefWithPHIEdgeClones(
+      MachineInstr &MI, const PHIEdgeSites &Sites);
 
   /// Postpone the splitting of the given critical
   /// edge (\p From, \p To).
@@ -843,6 +869,160 @@ bool MachineSinkingLegacy::runOnMachineFunction(MachineFunction &MF) {
   return Impl.run(MF);
 }
 
+bool MachineSinking::canSinkCloneOntoEdge(MachineInstr &MI,
+                                          MachineBasicBlock *From,
+                                          MachineBasicBlock *To) {
+
+  // Copy from FindSuccToSinkTo
+  if (From == To || To->isEHPad() || To->isInlineAsmBrIndirectTarget() ||
+      !TII->isSafeToSink(MI, To, CI))
+    return false;
+
+  if (To->pred_size() > 1)
+    return isLegalToBreakCriticalEdge(MI, From, To, /*BreakPHIEdge=*/true) &&
+           From->canSplitCriticalEdge(To, MLI);
+
+  return true;
+}
+
+/// Return true when \p MBB is hot enough, relative to the sites that would
+/// receive a clone, to be worth splitting the def out of.
+bool MachineSinking::isPHIEdgeRematProfitable(MachineBasicBlock *MBB,
+                                              const PHIEdgeSites &Sites) {
+  // Collect the sink target blocks. Use set due to PHIPredBB could be
+  // duplicate.
+  SmallPtrSet<MachineBasicBlock *, 4> Blocks;
+  for (const auto &[Edge, Uses] : Sites)
+    Blocks.insert(Edge.first == MBB ? Edge.second : Edge.first);
+
+  // Accumulate the frequency
+  BlockFrequency UseFreq;
+  for (MachineBasicBlock *Site : Blocks)
+    UseFreq += MBFI->getBlockFreq(Site);
+
+  // It worth when Freq(MBB) > sum(Freq(blocks)) * Ratio
+  return MBFI->getBlockFreq(MBB).getFrequency() / PHIEdgeRematFreqRatio >
+         UseFreq.getFrequency();
+}
+
+/// Give \p MI a private copy for each PHI edge that uses it.
+bool MachineSinking::tryCloneDefPerPHIEdge(MachineInstr &MI) {
+  MachineBasicBlock *MBB = MI.getParent();
+  Register Reg = MI.getOperand(0).getReg();
+
+  // Collect the phi's pred BB -> phi BB edge
+  // There are two case:
+  //   1. MI's MBB -> PHI node BB
+  //   2. MI's MBB -> PHI node BB's Pred -> PHI node BB
+  // Find there is the case 1.
+  // Each site is the edge a use arrives on: the block the value comes from
+  // and the block whose PHIs read it. Remember the uses themselves, so that
+  // cloning does not have to walk the use list again to find them.
+  PHIEdgeSites Sites;
+  bool AnyOwnEdge = false;
+  for (MachineOperand &MO : MRI->use_nodbg_operands(Reg)) {
+    MachineInstr *PHI = MO.getParent();
+    if (!PHI->isPHI())
+      return false;
+    MachineBasicBlock *PHIPredBB =
+        PHI->getOperand(MO.getOperandNo() + 1).getMBB();
+    Sites[{PHIPredBB, PHI->getParent()}].push_back(&MO);
+    AnyOwnEdge |= PHIPredBB == MBB;
+  }
+
+  // Give up if there aren't case 1.
+  if (!AnyOwnEdge)
+    return false;
+
+  // Only one edge already be handle by MachineSink. 
+  if (Sites.size() < 2)
+    return false;
+
+  if (!isPHIEdgeRematProfitable(MBB, Sites))
+    return false;
+
+  // Check It can sink from hot path into succ block. 
+  // If the clone will stay in the MBB then give up.
+  for (const auto &[Edge, Uses] : Sites) {
+    if (canSinkCloneOntoEdge(MI, Edge.first, Edge.second))
+      continue;
+    if (Edge.first == MBB)
+      return false;
+  }
+
+  replaceDefWithPHIEdgeClones(MI, Sites);
+  return true;
+}
+
+/// Replace \p MI with one clone of it per site in \p Sites, and point the uses
+/// at the clone serving the edge each of them names.
+void MachineSinking::replaceDefWithPHIEdgeClones(MachineInstr &MI,
+                                                 const PHIEdgeSites &Sites) {
+  MachineBasicBlock *MBB = MI.getParent();
+  MachineFunction &MF = *MBB->getParent();
+  Register Reg = MI.getOperand(0).getReg();
+  const TargetRegisterClass *RC = MRI->getRegClass(Reg);
+  Register LocalReg;
+  for (const auto &[Edge, Uses] : Sites) {
+    auto [PHIPredBB, PHIBB] = Edge;
+    Register CloneReg = MRI->createVirtualRegister(RC);
+    MachineInstr *CloneMI = MF.CloneMachineInstr(&MI);
+    CloneMI->getOperand(0).setReg(CloneReg);
+
+    // Keep the debug info valid.
+    if (PHIPredBB == MBB)
+      LocalReg = CloneReg;
+
+    PHIPredBB->insert(PHIPredBB == MBB
+                          ? MI.getIterator()
+                          : findPHICopyInsertPoint(PHIPredBB, PHIBB, CloneReg),
+                      CloneMI);
+
+    // Each use names the edge it arrives on, so the uses this clone serves are
+    // exactly the ones collected for this edge.
+    for (MachineOperand *MO : Uses)
+      MO->setReg(CloneReg);
+  }
+
+  assert(MRI->use_nodbg_empty(Reg) &&
+         "Every use was collected as a site above");
+
+  // MI will be erased, replace remain user with one of cloneReg in MBB.
+  assert(LocalReg.isValid() && "No clone was left at MI's own position");
+  for (MachineOperand &MO : llvm::make_early_inc_range(MRI->use_operands(Reg)))
+    MO.setReg(LocalReg);
+
+  MI.eraseFromParent();
+}
+
+/// Pre-pass over the function looking for defs worth cloning into the PHI edges
+/// that use them, rather than leaving them in a much hotter block.
+bool MachineSinking::cloneDefsPerPHIEdge(MachineFunction &MF) {
+  // Without frequencies there is no way to tell a hot block from a cold one,
+  // and the shape alone is not enough to act on.
+  if (!MBFI || !PHIEdgeRematFreqRatio)
+    return false;
+
+  bool Changed = false;
+  for (MachineBasicBlock &MBB : MF) {
+    if (MBB.succ_size() <= 1)
+      continue;
+    for (MachineInstr &MI : llvm::make_early_inc_range(MBB)) {
+      if (MI.isPHI() || MI.isTerminator() || MI.isMetaInstruction())
+        continue;
+      if (MI.getNumDefs() != 1 || MI.getNumExplicitDefs() != 1)
+        continue;
+      const MachineOperand &DefMO = MI.getOperand(0);
+      if (!DefMO.isReg() || !DefMO.getReg().isVirtual() || DefMO.getSubReg())
+        continue;
+      if (MI.isNotDuplicable() || !TII->isTriviallyReMaterializable(MI))
+        continue;
+      Changed |= tryCloneDefPerPHIEdge(MI);
+    }
+  }
+  return Changed;
+}
+
 bool MachineSinking::run(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "******** Machine Sinking ********\n");
 
@@ -860,6 +1040,14 @@ bool MachineSinking::run(MachineFunction &MF) {
     CEBCandidates.clear();
     CEMergeCandidates.clear();
     ToSplit.clear();
+
+    // Give defs whose uses are PHI operands on several out-edges one clone per
+    // consuming site, so that the sinking below has a movable def per
+    // successor. Deliberately not folded into MadeChange: if sinking declines
+    // them all, another trip would find nothing, because every clone this makes
+    // has a single site and so is never reconsidered.
+    EverMadeChange |= cloneDefsPerPHIEdge(MF);
+
     for (auto &MBB : MF)
       MadeChange |= ProcessBlock(MBB);
 
