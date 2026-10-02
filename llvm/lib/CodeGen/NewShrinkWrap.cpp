@@ -23,7 +23,15 @@
 //    GCC places the epilogue on every exit reached with the frame. LLVM has a
 //    single restore point instead, which is the nearest common post-dominator
 //    of PRO and the blocks needing the frame, moved out of loops. Only the
-//    blocks between PRO and the restore point need to be duplicated.
+//    blocks between PRO and the restore point need to be duplicated. If no
+//    return is reachable from PRO, no epilogue is needed, and the restore
+//    point is a block without successors.
+//
+//    Before this, like GCC's prepare_shrink_wrap, the code is changed so that
+//    fewer blocks need the frame: return values computed in callee-saved
+//    registers on paths that need no frame otherwise are computed in the
+//    return registers instead, and the definitions of callee-saved registers
+//    are moved out of PRO when this moves PRO down.
 //
 // 2. Separate shrink-wrapping of callee-saved registers (GCC's
 //    try_shrink_wrapping_separate).
@@ -48,11 +56,14 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
@@ -164,6 +175,14 @@ class NewShrinkWrapImpl {
 
   /// Collect FrameBlocks. Return false if the function cannot be handled.
   bool collectFrameBlocks();
+
+  /// Make the paths that only need the frame to pass the return value in a
+  /// callee-saved register pass it in the return register instead.
+  bool forwardReturnCopies();
+
+  /// Move the definitions of callee-saved registers out of the block the
+  /// prologue would be placed before. Return true if the function changed.
+  bool sinkCSRDefs();
 
   // Shrink-wrapping of the prologue/epilogue.
   MachineBasicBlock *findRestorePoint(MachineBasicBlock *Pro);
@@ -361,6 +380,364 @@ bool NewShrinkWrapImpl::collectFrameBlocks() {
   return true;
 }
 
+/// Return the operand of the last instruction of \p MBB that reads or writes
+/// \p Src or \p Dst, if that instruction defines Src, does not read it, and
+/// the def can be renamed to Dst.
+static MachineOperand *findRenamableDef(MachineBasicBlock &MBB, MCRegister Src,
+                                        MCRegister Dst,
+                                        const TargetInstrInfo *TII,
+                                        const TargetRegisterInfo *TRI) {
+  auto Touches = [&](const MachineOperand &MO) {
+    if (MO.isRegMask())
+      return MO.clobbersPhysReg(Src) || MO.clobbersPhysReg(Dst);
+    return MO.isReg() && MO.getReg() &&
+           (TRI->regsOverlap(MO.getReg(), Src) ||
+            TRI->regsOverlap(MO.getReg(), Dst));
+  };
+  for (MachineInstr &MI : reverse(MBB)) {
+    if (MI.isDebugInstr() || none_of(MI.operands(), Touches))
+      continue;
+    if (MI.isCall() || MI.isInlineAsm() || MI.isTerminator())
+      return nullptr;
+    MachineOperand *Def = nullptr;
+    for (MachineOperand &MO : MI.operands()) {
+      if (MO.isRegMask())
+        return nullptr;
+      if (!MO.isReg() || !MO.getReg())
+        continue;
+      if (TRI->regsOverlap(MO.getReg(), Src)) {
+        // MI may read Dst, but must only define Src.
+        if (Def || !MO.isDef() || MO.isImplicit() || MO.getReg() != Src ||
+            MO.getSubReg() || MO.isTied() || MO.isEarlyClobber() ||
+            !MO.isRenamable())
+          return nullptr;
+        Def = &MO;
+      } else if (TRI->regsOverlap(MO.getReg(), Dst) && MO.isDef()) {
+        return nullptr;
+      }
+    }
+    if (!Def)
+      return nullptr;
+    if (!MI.isCopy()) {
+      const TargetRegisterClass *RC =
+          MI.getRegClassConstraint(MI.getOperandNo(Def), TII, TRI);
+      if (!RC || !RC->contains(Dst))
+        return nullptr;
+    }
+    return Def;
+  }
+  return nullptr;
+}
+
+/// The return value is often assigned to a callee-saved register, because it
+/// is live across a call on some path. The other paths then write that
+/// register, and need the frame, only to pass the return value:
+///
+///   bb.1:  renamable $x18 = COPY $x0
+///          PseudoBR %bb.3
+///   ...
+///   bb.3:  $x10 = COPY killed renamable $x18
+///          PseudoRET implicit $x10
+///
+/// GCC returns the value in the return register on these paths. Do the same:
+/// split the return block after its copies from callee-saved registers, and
+/// make the predecessors that need the frame only for these registers define
+/// the destinations of the copies instead, and branch to the second half.
+/// Return true if the function changed.
+bool NewShrinkWrapImpl::forwardReturnCopies() {
+  const MachineRegisterInfo &MRI = MF->getRegInfo();
+  SmallVector<MachineBasicBlock *, 4> ReturnBlocks;
+  for (MachineBasicBlock &MBB : *MF)
+    if (MBB.isReturnBlock() && MBB.succ_empty() && !MBB.pred_empty() &&
+        &MBB != &MF->front())
+      ReturnBlocks.push_back(&MBB);
+
+  bool Changed = false;
+  for (MachineBasicBlock *Ret : ReturnBlocks) {
+    // The copies (Dst, Src) from callee-saved registers starting the block.
+    SmallVector<std::pair<MCRegister, MCRegister>, 2> Copies;
+    MachineBasicBlock::iterator Tail = Ret->begin();
+    for (; Tail != Ret->end(); ++Tail) {
+      if (Tail->isDebugInstr())
+        continue;
+      if (!Tail->isCopy())
+        break;
+      Register Dst = Tail->getOperand(0).getReg();
+      Register Src = Tail->getOperand(1).getReg();
+      if (!Dst.isPhysical() || !Src.isPhysical() ||
+          !RCI->getLastCalleeSavedAlias(Src) ||
+          RCI->getLastCalleeSavedAlias(Dst) || MRI.isReserved(Dst) ||
+          any_of(Copies, [&](const auto &C) {
+            return TRI->regsOverlap(C.first, Dst) ||
+                   TRI->regsOverlap(C.second, Src);
+          }))
+        break;
+      Copies.push_back({Dst.asMCReg(), Src.asMCReg()});
+    }
+    // The rest of the block must not need the frame, and thus does not read
+    // the sources.
+    if (Copies.empty() ||
+        any_of(make_range(Tail, Ret->end()), [&](const MachineInstr &MI) {
+          return useOrDefCSROrFI(MI, /*StackAddressUsed=*/true);
+        }))
+      continue;
+
+    struct Forward {
+      MachineBasicBlock *Pred;
+      MachineBasicBlock *FallThrough;
+      SmallVector<MachineOperand *, 2> Defs;
+    };
+    SmallVector<Forward, 4> Forwards;
+    for (MachineBasicBlock *Pred : Ret->predecessors()) {
+      if (Pred == Ret || Pred->succ_size() != 1 || !canRedirect(*Pred))
+        continue;
+      Forward F{Pred, Pred->getLogicalFallThrough(), {}};
+      for (auto [Dst, Src] : Copies) {
+        MachineOperand *Def = findRenamableDef(*Pred, Src, Dst, TII, TRI);
+        if (!Def)
+          break;
+        F.Defs.push_back(Def);
+      }
+      if (F.Defs.size() != Copies.size())
+        continue;
+      // Only forward if Pred does not need the frame otherwise.
+      for (auto [Def, Copy] : zip(F.Defs, Copies))
+        Def->setReg(Copy.first);
+      if (any_of(*Pred, [&](const MachineInstr &MI) {
+            return useOrDefCSROrFI(MI, /*StackAddressUsed=*/false);
+          })) {
+        for (auto [Def, Copy] : zip(F.Defs, Copies))
+          Def->setReg(Copy.second);
+        continue;
+      }
+      Forwards.push_back(std::move(F));
+    }
+    if (Forwards.empty())
+      continue;
+
+    MachineBasicBlock *RetTail =
+        MF->CreateMachineBasicBlock(Ret->getBasicBlock());
+    MF->insert(std::next(Ret->getIterator()), RetTail);
+    RetTail->splice(RetTail->end(), Ret, Tail, Ret->end());
+    RetTail->setCallFrameSize(Ret->getCallFrameSize());
+    Ret->addSuccessor(RetTail, BranchProbability::getOne());
+    LivePhysRegs LiveRegs;
+    computeAndAddLiveIns(LiveRegs, *RetTail);
+    LLVM_DEBUG(dbgs() << "Split return block " << printMBBReference(*Ret)
+                      << " at " << printMBBReference(*RetTail) << '\n');
+
+    for (Forward &F : Forwards) {
+      // Keep the debug values of the sources after their defs.
+      for (auto [Def, Copy] : zip(F.Defs, Copies))
+        for (MachineInstr &MI : make_range(
+                 std::next(MachineBasicBlock::iterator(Def->getParent())),
+                 F.Pred->end()))
+          if (MI.isDebugInstr())
+            for (MachineOperand &MO : MI.operands())
+              if (MO.isReg() && MO.getReg() == Copy.second)
+                MO.setReg(Copy.first);
+      F.Pred->ReplaceUsesOfBlockWith(Ret, RetTail);
+      F.Pred->updateTerminator(F.FallThrough == Ret ? RetTail : F.FallThrough);
+      LLVM_DEBUG(dbgs() << "Forwarded the return value of "
+                        << printMBBReference(*F.Pred) << '\n');
+    }
+    if (Ret->pred_empty()) {
+      Ret->removeSuccessor(RetTail);
+      Ret->eraseFromParent();
+    }
+    Changed = true;
+  }
+  return Changed;
+}
+
+/// Return the nearest common dominator of \p Blocks, which is not empty.
+static MachineBasicBlock *
+findNearestCommonDominator(MachineDominatorTree &DT,
+                           ArrayRef<MachineBasicBlock *> Blocks) {
+  MachineBasicBlock *Dom = Blocks.front();
+  for (MachineBasicBlock *MBB : Blocks)
+    Dom = DT.findNearestCommonDominator(Dom, MBB);
+  return Dom;
+}
+
+/// GCC moves the copies to callee-saved registers in the entry block down to
+/// the successor that uses them (prepare_shrink_wrap), so that the entry block
+/// does not need the frame. Do the same for the block PRO the prologue would
+/// be placed before: if it needs the frame only for callee-saved registers it
+/// defines and passes to some of its successors, rename these registers to
+/// free caller-saved ones in it, and copy them to the callee-saved registers
+/// at the start of these successors:
+///
+///   bb.0:  renamable $x8 = COPY $x11            bb.0:  $x5 = COPY $x11
+///          renamable $x11 = LBU renamable $x8   =>     $x11 = LBU $x5
+///          BNE ..., %bb.2                              BNE ..., %bb.2
+///   bb.2:  liveins: $x8                         bb.2:  $x8 = COPY killed $x5
+///
+/// This is only done if it moves PRO down, i.e. the paths through the other
+/// successors do not need the frame.
+bool NewShrinkWrapImpl::sinkCSRDefs() {
+  if (FrameBlocks.empty())
+    return false;
+  MachineBasicBlock *Pro = findNearestCommonDominator(*MDT, FrameBlocks);
+  if (!is_contained(FrameBlocks, Pro) || Pro->isEHPad() ||
+      Pro->isInlineAsmBrIndirectTarget())
+    return false;
+
+  auto OverlapsLiveIn = [&](const MachineBasicBlock &MBB, MCRegister Reg) {
+    return any_of(MBB.liveins(),
+                  [&](const MachineBasicBlock::RegisterMaskPair &LI) {
+                    return TRI->regsOverlap(LI.PhysReg, Reg);
+                  });
+  };
+
+  // The callee-saved registers defined in Pro, and their operands in it.
+  SmallVector<MCRegister, 2> Regs;
+  for (const MachineInstr &MI : *Pro) {
+    if (MI.isDebugInstr())
+      continue;
+    if (MI.isCall() || MI.isInlineAsm())
+      return false;
+    for (const MachineOperand &MO : MI.operands())
+      if (MO.isReg() && MO.isDef() && MO.getReg() &&
+          RCI->getLastCalleeSavedAlias(MO.getReg()) &&
+          !is_contained(Regs, MO.getReg().asMCReg()))
+        Regs.push_back(MO.getReg().asMCReg());
+  }
+  if (Regs.empty())
+    return false;
+  DenseMap<MCRegister, SmallVector<MachineOperand *, 4>> Operands;
+  for (MCRegister Reg : Regs) {
+    if (OverlapsLiveIn(*Pro, Reg))
+      return false;
+    for (MachineInstr &MI : *Pro)
+      for (MachineOperand &MO : MI.operands()) {
+        if (!MO.isReg() || !MO.getReg() || !TRI->regsOverlap(MO.getReg(), Reg))
+          continue;
+        if (MI.isDebugInstr())
+          continue;
+        if (MO.getReg() != Reg || MO.getSubReg() || MO.isImplicit() ||
+            !MO.isRenamable())
+          return false;
+        Operands[Reg].push_back(&MO);
+      }
+  }
+
+  // The successors the registers are passed to.
+  SmallVector<MachineBasicBlock *, 2> Targets;
+  for (MachineBasicBlock *Succ : Pro->successors()) {
+    if (none_of(Regs,
+                [&](MCRegister Reg) { return OverlapsLiveIn(*Succ, Reg); }))
+      continue;
+    if (Succ->pred_size() != 1 || Succ->isEHPad() ||
+        Succ->isInlineAsmBrIndirectTarget())
+      return false;
+    Targets.push_back(Succ);
+  }
+
+  // Check that PRO moves down, to a block that does not post-dominate it
+  // (findPrologueRegion would move it back up otherwise).
+  SmallVector<MachineBasicBlock *, 16> NewFrameBlocks(Targets.begin(),
+                                                      Targets.end());
+  for (MachineBasicBlock *MBB : FrameBlocks)
+    if (MBB != Pro)
+      NewFrameBlocks.push_back(MBB);
+  if (NewFrameBlocks.empty())
+    return false;
+  MachineBasicBlock *NewPro = findNearestCommonDominator(*MDT, NewFrameBlocks);
+  if (NewPro == Pro || MPDT->dominates(NewPro, Pro))
+    return false;
+
+  // Pick a scratch register for each callee-saved register: one that is not
+  // callee-saved, accepted by all its operands, and not used in Pro or live
+  // into Pro or its successors.
+  auto IsFree = [&](MCRegister T) {
+    if (RCI->getLastCalleeSavedAlias(T) || OverlapsLiveIn(*Pro, T) ||
+        any_of(Pro->successors(), [&](const MachineBasicBlock *Succ) {
+          return OverlapsLiveIn(*Succ, T);
+        }))
+      return false;
+    return none_of(*Pro, [&](const MachineInstr &MI) {
+      return any_of(MI.operands(), [&](const MachineOperand &MO) {
+        return MO.isReg() && MO.getReg() && TRI->regsOverlap(MO.getReg(), T);
+      });
+    });
+  };
+  auto IsAccepted = [&](MCRegister T, ArrayRef<MachineOperand *> MOs) {
+    return all_of(MOs, [&](const MachineOperand *MO) {
+      const MachineInstr &MI = *MO->getParent();
+      if (MI.isCopy())
+        return true;
+      const TargetRegisterClass *RC =
+          MI.getRegClassConstraint(MI.getOperandNo(MO), TII, TRI);
+      return RC && RC->contains(T);
+    });
+  };
+  SmallVector<MCRegister, 2> Scratches;
+  for (MCRegister Reg : Regs) {
+    // Look for the scratch in the largest class of registers of the same
+    // size containing Reg.
+    const TargetRegisterClass *MinRC = TRI->getMinimalPhysRegClass(Reg);
+    const TargetRegisterClass *RC = MinRC;
+    for (unsigned I = 0, E = TRI->getNumRegClasses(); I != E; ++I)
+      if (const TargetRegisterClass *C = TRI->getRegClass(I);
+          C->isAllocatable() && C->contains(Reg) &&
+          TRI->getRegSizeInBits(*C) == TRI->getRegSizeInBits(*MinRC) &&
+          C->getNumRegs() > RC->getNumRegs())
+        RC = C;
+    MCRegister Scratch;
+    for (MCPhysReg T : RCI->getOrder(RC))
+      if (!is_contained(Scratches, T) && IsFree(T) &&
+          IsAccepted(T, Operands[Reg])) {
+        Scratch = T;
+        break;
+      }
+    if (!Scratch)
+      return false;
+    Scratches.push_back(Scratch);
+  }
+
+  // Rename, and check that Pro no longer needs the frame.
+  for (auto [Reg, Scratch] : zip(Regs, Scratches))
+    for (MachineOperand *MO : Operands[Reg])
+      MO->setReg(Scratch);
+  if (any_of(*Pro, [&](const MachineInstr &MI) {
+        return useOrDefCSROrFI(MI, /*StackAddressUsed=*/true);
+      })) {
+    for (auto [Reg, Scratch] : zip(Regs, Scratches))
+      for (MachineOperand *MO : Operands[Reg])
+        MO->setReg(Reg);
+    return false;
+  }
+  for (auto [Reg, Scratch] : zip(Regs, Scratches)) {
+    // The scratch is live out to the copies; drop the kill and dead flags.
+    // Any free register would do, so it stays renamable.
+    for (MachineOperand *MO : Operands[Reg]) {
+      MO->setIsRenamable();
+      if (MO->isDef())
+        MO->setIsDead(false);
+      else
+        MO->setIsKill(false);
+    }
+    for (MachineInstr &MI : *Pro)
+      for (MachineOperand &MO : MI.operands())
+        if (MI.isDebugInstr() && MO.isReg() && MO.getReg() == Reg)
+          MO.setReg(Scratch);
+    for (MachineBasicBlock *Succ : Targets) {
+      if (!Succ->isLiveIn(Reg))
+        continue;
+      BuildMI(*Succ, Succ->begin(), DebugLoc(), TII->get(TargetOpcode::COPY),
+              Reg)
+          .addReg(Scratch, RegState::Kill);
+      Succ->removeLiveIn(Reg);
+      Succ->addLiveIn(Scratch);
+      LLVM_DEBUG(dbgs() << "Moved the def of " << printReg(Reg, TRI) << " from "
+                        << printMBBReference(*Pro) << " to "
+                        << printMBBReference(*Succ) << '\n');
+    }
+  }
+  return true;
+}
+
 static MachineBasicBlock *getImmediateDominator(MachineDominatorTree &DT,
                                                 MachineBasicBlock *MBB) {
   MachineDomTreeNode *IDom = DT.getNode(MBB)->getIDom();
@@ -374,16 +751,44 @@ getImmediatePostDominator(MachinePostDominatorTree &PDT,
   return IDom ? IDom->getBlock() : nullptr;
 }
 
+/// Return true if \p MBB ends the function without returning, so that it
+/// needs no epilogue.
+static bool isNoReturnExit(const MachineBasicBlock &MBB) {
+  return MBB.succ_empty() && !MBB.isReturnBlock();
+}
+
+/// If no return block is reachable from \p Pro, return a block without
+/// successors reachable from it, or null if there is none. The frame is never
+/// torn down after \p Pro, so this block can be the restore point: as it does
+/// not return, no epilogue is emitted in it (GCC emits no epilogue either).
+static MachineBasicBlock *findNoReturnRestorePoint(MachineBasicBlock *Pro) {
+  MachineBasicBlock *Restore = nullptr;
+  SmallPtrSet<MachineBasicBlock *, 16> Visited({Pro});
+  SmallVector<MachineBasicBlock *, 16> WorkList({Pro});
+  while (!WorkList.empty()) {
+    MachineBasicBlock *MBB = WorkList.pop_back_val();
+    if (MBB->isReturnBlock())
+      return nullptr;
+    if (!Restore && MBB->succ_empty())
+      Restore = MBB;
+    for (MachineBasicBlock *Succ : MBB->successors())
+      if (Visited.insert(Succ).second)
+        WorkList.push_back(Succ);
+  }
+  return Restore;
+}
+
 /// Find the block at the end of which the epilogue goes, for the prologue
 /// placed before \p Pro: the nearest common post-dominator of Pro and all
 /// blocks needing the frame, which is not in a loop (the prologue is not
-/// either), and whose terminators do not need the frame.
+/// either), and whose terminators do not need the frame. If there is no such
+/// block because Pro never reaches a return, see findNoReturnRestorePoint.
 MachineBasicBlock *NewShrinkWrapImpl::findRestorePoint(MachineBasicBlock *Pro) {
   MachineBasicBlock *Restore = Pro;
   for (MachineBasicBlock *MBB : FrameBlocks) {
     Restore = MPDT->findNearestCommonDominator(Restore, MBB);
     if (!Restore)
-      return nullptr;
+      return findNoReturnRestorePoint(Pro);
   }
 
   while (Restore) {
@@ -503,9 +908,7 @@ bool NewShrinkWrapImpl::findPrologueRegion(PrologueRegion &Region) {
     return false;
 
   // The tightest placement dominates all blocks needing the frame.
-  MachineBasicBlock *Pro = FrameBlocks.front();
-  for (MachineBasicBlock *MBB : FrameBlocks)
-    Pro = MDT->findNearestCommonDominator(Pro, MBB);
+  MachineBasicBlock *Pro = findNearestCommonDominator(*MDT, FrameBlocks);
   LLVM_DEBUG(dbgs() << "After wrapping required blocks, PRO is "
                     << printMBBReference(*Pro) << '\n');
 
@@ -1049,10 +1452,17 @@ bool NewShrinkWrapImpl::run(MachineFunction &Fn) {
       TRI->requiresRegisterScavenging(*MF) ? new RegScavenger() : nullptr);
   RS = OwnedRS.get();
 
-  if (!collectFrameBlocks())
-    return false;
+  bool Changed = forwardReturnCopies();
+  if (Changed)
+    recomputeAnalyses();
 
-  bool Changed = false;
+  if (!collectFrameBlocks())
+    return Changed;
+  while (sinkCSRDefs()) {
+    Changed = true;
+    collectFrameBlocks();
+  }
+
   MachineBasicBlock *Save = &MF->front();
   MachineBasicBlock *Restore = nullptr;
   PrologueRegion Region;
@@ -1073,7 +1483,8 @@ bool NewShrinkWrapImpl::run(MachineFunction &Fn) {
   }
 
   if (Restore) {
-    assert(MDT->dominates(Save, Restore) && MPDT->dominates(Restore, Save) &&
+    assert(MDT->dominates(Save, Restore) &&
+           (MPDT->dominates(Restore, Save) || isNoReturnExit(*Restore)) &&
            "Invalid save/restore points");
     LLVM_DEBUG(dbgs() << "Shrink-wrapped: save point "
                       << printMBBReference(*Save) << ", restore point "
@@ -1084,6 +1495,10 @@ bool NewShrinkWrapImpl::run(MachineFunction &Fn) {
     ++NumShrinkWrapped;
   }
 
+  // A restore point that does not return has no epilogue, so the region of
+  // the frame extends to all blocks after the prologue.
+  if (Restore && isNoReturnExit(*Restore))
+    Restore = nullptr;
   Changed |= shrinkWrapSeparately(Save, Restore);
   return Changed;
 }

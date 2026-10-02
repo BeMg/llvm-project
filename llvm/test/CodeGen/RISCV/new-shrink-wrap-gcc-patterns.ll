@@ -29,13 +29,13 @@
 ;
 ;   function                   OLD    NEW   NEW-RA   GCC 15 in the workload
 ;   drop (C)                   0.04   0.04  0.04     -
-;   _ZN7cObject4drop... (C++)  9.95   9.95  9.95     0 / 8 (frame on throw only)
+;   _ZN7cObject4drop... (C++)  9.95   0.05  0.05     0 / 8 (frame on throw only)
 ;   new_reference              4.00   4.00  0.02     0 / 2
 ;   is_ready                   6.00   4.67  0.20     0 / 2
 ;   dot                        20.0   6.12  5.14     8 / 26
 ;   legal                      16.0   6.10  4.12     2.3 / 12
 ;   multi_compare              16.0   10.0  0.01     0.5 / 8
-;   pool_get                   10.0   6.67  6.00     0 / 6 (no frame on early exits)
+;   pool_get                   10.0   3.33  2.67     0 / 6 (no frame on early exits)
 
 ; ModuleID = 'ir/clean.ll'
 source_filename = "ir/clean.ll"
@@ -189,8 +189,10 @@ declare dso_local void @do_insert(ptr noundef, ptr noundef) local_unnamed_addr
 ; Pattern A (C++), from omnetpp::cObject::drop: the cold path builds a
 ; std::string and throws, so it has landing pads and several blocks without
 ; successors. GCC sets up the frame on the throw path only.
-; FIXME: Neither pass shrink-wraps it: there is no common post-dominator of the
-; blocks needing the frame to place the (never executed) epilogue in.
+; ShrinkWrap does not shrink-wrap it: there is no common post-dominator of the
+; blocks needing the frame to place the (never executed) epilogue in. As no
+; return is reachable from the throw path, NewShrinkWrap uses one of its blocks
+; without successors as the restore point, which gets no epilogue.
 define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull align 1 dereferenceable(1) %this, ptr noundef %obj) local_unnamed_addr #3 align 2 personality ptr @__gxx_personality_v0 {
 ; OLD-LABEL: _ZN7cObject4dropEP12cOwnedObject:
 ; OLD:       # %bb.0: # %entry
@@ -302,6 +304,13 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ;
 ; NEW-LABEL: _ZN7cObject4dropEP12cOwnedObject:
 ; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    ld a2, 8(a1)
+; NEW-NEXT:    bne a2, a0, .LBB1_2
+; NEW-NEXT:  # %bb.1: # %if.end
+; NEW-NEXT:    lui a0, %hi(defaultOwner)
+; NEW-NEXT:    ld a0, %lo(defaultOwner)(a0)
+; NEW-NEXT:    tail _ZN10cSoftOwner8doInsertEP12cOwnedObject
+; NEW-NEXT:  .LBB1_2: # %if.then
 ; NEW-NEXT:    addi sp, sp, -80
 ; NEW-NEXT:    .cfi_def_cfa_offset 80
 ; NEW-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
@@ -314,27 +323,6 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; NEW-NEXT:    .cfi_offset s1, -24
 ; NEW-NEXT:    .cfi_offset s2, -32
 ; NEW-NEXT:    .cfi_offset s3, -40
-; NEW-NEXT:    .cfi_remember_state
-; NEW-NEXT:    ld a2, 8(a1)
-; NEW-NEXT:    bne a2, a0, .LBB1_2
-; NEW-NEXT:  # %bb.1: # %if.end
-; NEW-NEXT:    lui a0, %hi(defaultOwner)
-; NEW-NEXT:    ld a0, %lo(defaultOwner)(a0)
-; NEW-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s0, 64(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s1, 56(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s2, 48(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s3, 40(sp) # 8-byte Folded Reload
-; NEW-NEXT:    .cfi_restore ra
-; NEW-NEXT:    .cfi_restore s0
-; NEW-NEXT:    .cfi_restore s1
-; NEW-NEXT:    .cfi_restore s2
-; NEW-NEXT:    .cfi_restore s3
-; NEW-NEXT:    addi sp, sp, 80
-; NEW-NEXT:    .cfi_def_cfa_offset 0
-; NEW-NEXT:    tail _ZN10cSoftOwner8doInsertEP12cOwnedObject
-; NEW-NEXT:  .LBB1_2: # %if.then
-; NEW-NEXT:    .cfi_restore_state
 ; NEW-NEXT:    mv s1, a0
 ; NEW-NEXT:    li a0, 200
 ; NEW-NEXT:    mv s2, a1
@@ -410,6 +398,13 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ;
 ; NEW-RA-LABEL: _ZN7cObject4dropEP12cOwnedObject:
 ; NEW-RA:       # %bb.0: # %entry
+; NEW-RA-NEXT:    ld a2, 8(a1)
+; NEW-RA-NEXT:    bne a2, a0, .LBB1_2
+; NEW-RA-NEXT:  # %bb.1: # %if.end
+; NEW-RA-NEXT:    lui a0, %hi(defaultOwner)
+; NEW-RA-NEXT:    ld a0, %lo(defaultOwner)(a0)
+; NEW-RA-NEXT:    tail _ZN10cSoftOwner8doInsertEP12cOwnedObject
+; NEW-RA-NEXT:  .LBB1_2: # %if.then
 ; NEW-RA-NEXT:    addi sp, sp, -80
 ; NEW-RA-NEXT:    .cfi_def_cfa_offset 80
 ; NEW-RA-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
@@ -422,27 +417,6 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; NEW-RA-NEXT:    .cfi_offset s1, -24
 ; NEW-RA-NEXT:    .cfi_offset s2, -32
 ; NEW-RA-NEXT:    .cfi_offset s3, -40
-; NEW-RA-NEXT:    .cfi_remember_state
-; NEW-RA-NEXT:    ld a2, 8(a1)
-; NEW-RA-NEXT:    bne a2, a0, .LBB1_2
-; NEW-RA-NEXT:  # %bb.1: # %if.end
-; NEW-RA-NEXT:    lui a0, %hi(defaultOwner)
-; NEW-RA-NEXT:    ld a0, %lo(defaultOwner)(a0)
-; NEW-RA-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s0, 64(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s1, 56(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s2, 48(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s3, 40(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    .cfi_restore ra
-; NEW-RA-NEXT:    .cfi_restore s0
-; NEW-RA-NEXT:    .cfi_restore s1
-; NEW-RA-NEXT:    .cfi_restore s2
-; NEW-RA-NEXT:    .cfi_restore s3
-; NEW-RA-NEXT:    addi sp, sp, 80
-; NEW-RA-NEXT:    .cfi_def_cfa_offset 0
-; NEW-RA-NEXT:    tail _ZN10cSoftOwner8doInsertEP12cOwnedObject
-; NEW-RA-NEXT:  .LBB1_2: # %if.then
-; NEW-RA-NEXT:    .cfi_restore_state
 ; NEW-RA-NEXT:    mv s1, a0
 ; NEW-RA-NEXT:    li a0, 200
 ; NEW-RA-NEXT:    mv s2, a1
@@ -2025,9 +1999,11 @@ declare dso_local signext i32 @match_class(ptr noundef, ptr noundef, i32 noundef
 ; Function Attrs: noinline nounwind
 ; Pattern E, from omnetpp StaticStringPool::get: the early exits return
 ; constants and join the return block of the path with calls.
-; FIXME: The return value phi is assigned to s2, so the early exits write s2
-; and need the frame. GCC returns them in a0 without a frame. NEW only wraps
-; the other callee-saved registers separately.
+; The return value phi is assigned to s2, so the early exits write s2 and the
+; return block copies it to a0. NewShrinkWrap makes the early exits write a0
+; and skip that copy, like GCC. The copy of %s to s0 in %if.end is done to a
+; free caller-saved register instead, and copied to s0 in %for.body.preheader,
+; where the prologue then goes.
 define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unnamed_addr #0 {
 ; OLD-LABEL: pool_get:
 ; OLD:       # %bb.0: # %entry
@@ -2099,18 +2075,19 @@ define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unn
 ;
 ; NEW-LABEL: pool_get:
 ; NEW:       # %bb.0: # %entry
-; NEW-NEXT:    addi sp, sp, -48
-; NEW-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s2, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    beqz a1, .LBB7_7
 ; NEW-NEXT:  # %bb.1: # %if.end
-; NEW-NEXT:    sd s0, 32(sp) # 8-byte Folded Spill
-; NEW-NEXT:    mv s0, a1
+; NEW-NEXT:    mv a2, a1
 ; NEW-NEXT:    lbu a1, 0(a1)
 ; NEW-NEXT:    beqz a1, .LBB7_8
 ; NEW-NEXT:  # %bb.2: # %for.body.preheader
+; NEW-NEXT:    addi sp, sp, -48
+; NEW-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s0, 32(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    sd s1, 24(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s2, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    sd s3, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    mv s0, a2
 ; NEW-NEXT:    lui a2, 1
 ; NEW-NEXT:    addi a3, s0, 1
 ; NEW-NEXT:    addi a2, a2, 1285
@@ -2142,13 +2119,12 @@ define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unn
 ; NEW-NEXT:    bnez a0, .LBB7_5
 ; NEW-NEXT:    j .LBB7_10
 ; NEW-NEXT:  .LBB7_7:
-; NEW-NEXT:    li s2, 0
-; NEW-NEXT:    j .LBB7_11
+; NEW-NEXT:    li a0, 0
+; NEW-NEXT:    ret
 ; NEW-NEXT:  .LBB7_8:
-; NEW-NEXT:    lui s2, %hi(.L.str.2)
-; NEW-NEXT:    addi s2, s2, %lo(.L.str.2)
-; NEW-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
-; NEW-NEXT:    j .LBB7_11
+; NEW-NEXT:    lui a0, %hi(.L.str.2)
+; NEW-NEXT:    addi a0, a0, %lo(.L.str.2)
+; NEW-NEXT:    ret
 ; NEW-NEXT:  .LBB7_9: # %for.end16
 ; NEW-NEXT:    mv a0, s0
 ; NEW-NEXT:    call strdup_new
@@ -2157,29 +2133,29 @@ define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unn
 ; NEW-NEXT:    mv a1, s2
 ; NEW-NEXT:    call insert
 ; NEW-NEXT:  .LBB7_10: # %return
-; NEW-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s1, 24(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s3, 8(sp) # 8-byte Folded Reload
-; NEW-NEXT:  .LBB7_11: # %return
 ; NEW-NEXT:    mv a0, s2
 ; NEW-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s1, 24(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    ld s2, 16(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s3, 8(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    addi sp, sp, 48
 ; NEW-NEXT:    ret
 ;
 ; NEW-RA-LABEL: pool_get:
 ; NEW-RA:       # %bb.0: # %entry
-; NEW-RA-NEXT:    addi sp, sp, -48
-; NEW-RA-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s1, 24(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    beqz a1, .LBB7_7
 ; NEW-RA-NEXT:  # %bb.1: # %if.end
-; NEW-RA-NEXT:    sd s0, 32(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    mv s0, a1
+; NEW-RA-NEXT:    mv a2, a1
 ; NEW-RA-NEXT:    lbu a1, 0(a1)
 ; NEW-RA-NEXT:    beqz a1, .LBB7_8
 ; NEW-RA-NEXT:  # %bb.2: # %for.body.preheader
+; NEW-RA-NEXT:    addi sp, sp, -48
+; NEW-RA-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    sd s0, 32(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    sd s1, 24(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    sd s2, 16(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    mv s0, a2
 ; NEW-RA-NEXT:    lui a2, 1
 ; NEW-RA-NEXT:    addi a3, s0, 1
 ; NEW-RA-NEXT:    addi a2, a2, 1285
@@ -2211,13 +2187,12 @@ define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unn
 ; NEW-RA-NEXT:    bnez a0, .LBB7_5
 ; NEW-RA-NEXT:    j .LBB7_10
 ; NEW-RA-NEXT:  .LBB7_7:
-; NEW-RA-NEXT:    li s1, 0
-; NEW-RA-NEXT:    j .LBB7_11
+; NEW-RA-NEXT:    li a0, 0
+; NEW-RA-NEXT:    ret
 ; NEW-RA-NEXT:  .LBB7_8:
-; NEW-RA-NEXT:    lui s1, %hi(.L.str.2)
-; NEW-RA-NEXT:    addi s1, s1, %lo(.L.str.2)
-; NEW-RA-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    j .LBB7_11
+; NEW-RA-NEXT:    lui a0, %hi(.L.str.2)
+; NEW-RA-NEXT:    addi a0, a0, %lo(.L.str.2)
+; NEW-RA-NEXT:    ret
 ; NEW-RA-NEXT:  .LBB7_9: # %for.end16
 ; NEW-RA-NEXT:    mv a0, s0
 ; NEW-RA-NEXT:    call strdup_new
@@ -2226,12 +2201,11 @@ define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unn
 ; NEW-RA-NEXT:    mv a1, s1
 ; NEW-RA-NEXT:    call insert
 ; NEW-RA-NEXT:  .LBB7_10: # %return
-; NEW-RA-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s2, 16(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:  .LBB7_11: # %return
 ; NEW-RA-NEXT:    mv a0, s1
 ; NEW-RA-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    ld s1, 24(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld s2, 16(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    addi sp, sp, 48
 ; NEW-RA-NEXT:    ret
 entry:
