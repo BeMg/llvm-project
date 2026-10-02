@@ -747,6 +747,8 @@ struct MachineFrameInfo {
   unsigned LocalFrameSize = 0;
   std::vector<SaveRestorePointEntry> SavePoints;
   std::vector<SaveRestorePointEntry> RestorePoints;
+  std::vector<SaveRestorePointEntry> CSRSavePoints;
+  std::vector<SaveRestorePointEntry> CSRRestorePoints;
 
   bool operator==(const MachineFrameInfo &Other) const {
     return IsFrameAddressTaken == Other.IsFrameAddressTaken &&
@@ -770,6 +772,8 @@ struct MachineFrameInfo {
            LocalFrameSize == Other.LocalFrameSize &&
            SavePoints == Other.SavePoints &&
            RestorePoints == Other.RestorePoints &&
+           CSRSavePoints == Other.CSRSavePoints &&
+           CSRRestorePoints == Other.CSRRestorePoints &&
            IsCalleeSavedInfoValid == Other.IsCalleeSavedInfoValid;
   }
 };
@@ -804,6 +808,8 @@ template <> struct MappingTraits<MachineFrameInfo> {
     YamlIO.mapOptional("localFrameSize", MFI.LocalFrameSize, (unsigned)0);
     YamlIO.mapOptional("savePoint", MFI.SavePoints);
     YamlIO.mapOptional("restorePoint", MFI.RestorePoints);
+    YamlIO.mapOptional("csrSavePoints", MFI.CSRSavePoints);
+    YamlIO.mapOptional("csrRestorePoints", MFI.CSRRestorePoints);
   }
 };
 

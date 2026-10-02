@@ -25,6 +25,7 @@
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachinePassRegistry.h"
+#include "llvm/CodeGen/NewShrinkWrap.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/IR/IRPrintingPasses.h"
@@ -1189,7 +1190,7 @@ void TargetPassConfig::addMachinePasses() {
   // Insert prolog/epilog code.  Eliminate abstract frame index references...
   if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(&PostRAMachineSinkingID);
-    addPass(&ShrinkWrapID);
+    addPass(isNewShrinkWrapEnabled() ? &NewShrinkWrapID : &ShrinkWrapID);
   }
 
   // Prolog/Epilog inserter needs a TargetMachine to instantiate. But only

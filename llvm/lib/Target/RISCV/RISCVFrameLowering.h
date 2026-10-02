@@ -71,6 +71,17 @@ public:
 
   bool enableShrinkWrapping(const MachineFunction &MF) const override;
 
+  bool enableSeparateCSRShrinkWrapping(const MachineFunction &MF) const override;
+  bool canShrinkWrapCSRSeparately(const MachineFunction &MF,
+                                  MCRegister Reg) const override;
+  void emitSeparateCSRCFI(MachineBasicBlock &MBB,
+                          MachineBasicBlock::iterator MBBI,
+                          ArrayRef<CalleeSavedInfo> CSI,
+                          bool IsSave) const override;
+
+  bool enableCFIFixup(const MachineFunction &MF) const override;
+  bool enableCFIInstrInserter(const MachineFunction &MF) const override;
+
   Register
   findScratchNonCalleeSaveRegister(MachineBasicBlock *MBB,
                                    Register PreferredReg,

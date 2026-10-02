@@ -975,6 +975,15 @@ bool MIRParserImpl::initializeFrameInfo(PerFunctionMIParsingState &PFS,
   if (initializeSaveRestorePoints(PFS, YamlMFI.RestorePoints, RestorePoints))
     return true;
   MFI.setRestorePoints(RestorePoints);
+  llvm::SaveRestorePoints CSRSavePoints;
+  if (initializeSaveRestorePoints(PFS, YamlMFI.CSRSavePoints, CSRSavePoints))
+    return true;
+  MFI.setCSRSavePoints(CSRSavePoints);
+  llvm::SaveRestorePoints CSRRestorePoints;
+  if (initializeSaveRestorePoints(PFS, YamlMFI.CSRRestorePoints,
+                                  CSRRestorePoints))
+    return true;
+  MFI.setCSRRestorePoints(CSRRestorePoints);
 
   std::vector<CalleeSavedInfo> CSIInfo;
   // Initialize the fixed frame objects.

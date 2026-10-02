@@ -39,7 +39,8 @@ namespace {
 class CFIInstrInserterImpl {
 public:
   bool run(MachineFunction &MF) {
-    if (!MF.needsFrameMoves())
+    if (!MF.needsFrameMoves() ||
+        !MF.getSubtarget().getFrameLowering()->enableCFIInstrInserter(MF))
       return false;
 
     MBBVector.resize(MF.getNumBlockIDs());

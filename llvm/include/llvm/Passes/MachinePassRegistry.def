@@ -151,6 +151,7 @@ MACHINE_FUNCTION_PASS("reset-machine-function", ResetMachineFunctionPass())
 MACHINE_FUNCTION_PASS("require-all-machine-function-properties",
                       RequireAllMachineFunctionPropertiesPass())
 MACHINE_FUNCTION_PASS("shrink-wrap", ShrinkWrapPass())
+MACHINE_FUNCTION_PASS("new-shrink-wrap", NewShrinkWrapPass())
 MACHINE_FUNCTION_PASS("stack-coloring", StackColoringPass())
 MACHINE_FUNCTION_PASS("stack-frame-layout", StackFrameLayoutAnalysisPass())
 MACHINE_FUNCTION_PASS("stack-slot-coloring", StackSlotColoringPass())

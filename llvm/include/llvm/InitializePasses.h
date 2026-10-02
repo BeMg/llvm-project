@@ -301,6 +301,7 @@ LLVM_ABI void
 initializeSeparateConstOffsetFromGEPLegacyPassPass(PassRegistry &);
 LLVM_ABI void initializeShadowStackGCLoweringPass(PassRegistry &);
 LLVM_ABI void initializeShrinkWrapLegacyPass(PassRegistry &);
+LLVM_ABI void initializeNewShrinkWrapLegacyPass(PassRegistry &);
 LLVM_ABI void initializeSinkingLegacyPassPass(PassRegistry &);
 LLVM_ABI void initializeSjLjEHPreparePass(PassRegistry &);
 LLVM_ABI void initializeSlotIndexesWrapperPassPass(PassRegistry &);

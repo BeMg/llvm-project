@@ -398,6 +398,11 @@ static void convertMFI(ModuleSlotTracker &MST, yaml::MachineFrameInfo &YamlMFI,
     convertSRPoints(MST, YamlMFI.SavePoints, MFI.getSavePoints(), TRI);
   if (!MFI.getRestorePoints().empty())
     convertSRPoints(MST, YamlMFI.RestorePoints, MFI.getRestorePoints(), TRI);
+  if (!MFI.getCSRSavePoints().empty())
+    convertSRPoints(MST, YamlMFI.CSRSavePoints, MFI.getCSRSavePoints(), TRI);
+  if (!MFI.getCSRRestorePoints().empty())
+    convertSRPoints(MST, YamlMFI.CSRRestorePoints, MFI.getCSRRestorePoints(),
+                    TRI);
 }
 
 static void convertEntryValueObjects(yaml::MachineFunction &YMF,

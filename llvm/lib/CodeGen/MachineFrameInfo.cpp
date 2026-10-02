@@ -113,6 +113,36 @@ int MachineFrameInfo::CreateFixedSpillStackObject(uint64_t Size,
   return -++NumFixedObjects;
 }
 
+bool MachineFrameInfo::isCSRShrinkWrappedSeparately(MCRegister Reg) const {
+  for (const auto &[MBB, CSI] : CSRSavePoints)
+    for (const CalleeSavedInfo &CS : CSI)
+      if (CS.getReg() == Reg)
+        return true;
+  return false;
+}
+
+std::vector<CalleeSavedInfo>
+MachineFrameInfo::getCalleeSavedInfoForBlock(const MachineBasicBlock &MBB,
+                                             bool IsSave) const {
+  if (CSRSavePoints.empty())
+    return CSInfo;
+
+  const SaveRestorePoints &Points = IsSave ? CSRSavePoints : CSRRestorePoints;
+  auto It = Points.find(const_cast<MachineBasicBlock *>(&MBB));
+  auto IsListedForBlock = [&](MCRegister Reg) {
+    return It != Points.end() &&
+           any_of(It->second,
+                  [&](const CalleeSavedInfo &CS) { return CS.getReg() == Reg; });
+  };
+
+  std::vector<CalleeSavedInfo> Result;
+  for (const CalleeSavedInfo &CS : CSInfo)
+    if (!isCSRShrinkWrappedSeparately(CS.getReg()) ||
+        IsListedForBlock(CS.getReg()))
+      Result.push_back(CS);
+  return Result;
+}
+
 BitVector MachineFrameInfo::getPristineRegs(const MachineFunction &MF) const {
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
   BitVector BV(TRI->getNumRegs());

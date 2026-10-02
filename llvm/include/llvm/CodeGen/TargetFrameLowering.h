@@ -195,6 +195,32 @@ public:
     return false;
   }
 
+  /// Returns true if the target supports saving and restoring individual
+  /// callee-saved registers separately from the prologue/epilogue
+  /// ("separate shrink-wrapping") in \p MF.
+  virtual bool enableSeparateCSRShrinkWrapping(const MachineFunction &MF) const {
+    return false;
+  }
+
+  /// Returns true if the callee-saved register \p Reg may be saved and
+  /// restored separately from the prologue/epilogue. This is queried by the
+  /// shrink-wrapping pass, and again by prolog/epilog insertion once the
+  /// callee-saved info is valid; registers rejected at that point are saved
+  /// and restored by the prologue/epilogue.
+  virtual bool canShrinkWrapCSRSeparately(const MachineFunction &MF,
+                                          MCRegister Reg) const {
+    return false;
+  }
+
+  /// Emit the CFI describing the separate save (\p IsSave) or restore of the
+  /// callee-saved registers \p CSI, inserted before \p MBBI. This is called
+  /// after the frame layout is final, for blocks that save or restore
+  /// registers separately but do not contain the prologue/epilogue.
+  virtual void emitSeparateCSRCFI(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator MBBI,
+                                  ArrayRef<CalleeSavedInfo> CSI,
+                                  bool IsSave) const {}
+
   /// Returns true if the stack slot holes in the fixed and callee-save stack
   /// area should be used when allocating other stack locations to reduce stack
   /// size.
@@ -234,6 +260,12 @@ public:
   virtual bool enableFullCFIFixup(const MachineFunction &MF) const {
     return enableCFIFixup(MF);
   };
+
+  /// Returns true if the CFIInstrInserter pass should process \p MF, when it
+  /// is part of the pass pipeline.
+  virtual bool enableCFIInstrInserter(const MachineFunction &MF) const {
+    return true;
+  }
 
   /// Emit CFI instructions that recreate the state of the unwind information
   /// upon function entry.

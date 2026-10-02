@@ -27,6 +27,7 @@
 #include "llvm/CodeGen/MIRYamlMapping.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/MacroFusion.h"
+#include "llvm/CodeGen/NewShrinkWrap.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
@@ -605,7 +606,9 @@ void RISCVPassConfig::addPreEmitPass2() {
     return MF.getFunction().getParent()->getModuleFlag("kcfi");
   }));
 
-  if (EnableCFIInstrInserter)
+  // NewShrinkWrap may shrink-wrap callee-saved registers separately, which
+  // CFIFixup cannot handle.
+  if (EnableCFIInstrInserter || isNewShrinkWrapEnabled())
     addPass(createCFIInstrInserterLegacy());
 }
 

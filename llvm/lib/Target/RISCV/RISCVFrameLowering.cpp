@@ -1042,7 +1042,11 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   // Determine the correct frame layout
   determineFrameLayout(MF);
 
-  const auto &CSI = MFI.getCalleeSavedInfo();
+  // The callee-saved registers spilled in this block. Separately
+  // shrink-wrapped registers are saved elsewhere, unless this block is one
+  // of their save points.
+  const std::vector<CalleeSavedInfo> CSI =
+      MFI.getCalleeSavedInfoForBlock(MBB, /*IsSave=*/true);
 
   // Skip to before the spills of scalar callee-saved registers
   // FIXME: assumes exactly one instruction is used to restore each
@@ -1349,7 +1353,9 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
       --MBBI;
   }
 
-  const auto &CSI = MFI.getCalleeSavedInfo();
+  // The callee-saved registers restored in this block, see emitPrologue.
+  const std::vector<CalleeSavedInfo> CSI =
+      MFI.getCalleeSavedInfoForBlock(MBB, /*IsSave=*/false);
 
   // Skip to before the restores of scalar callee-saved registers
   // FIXME: assumes exactly one instruction is used to restore each
@@ -2749,6 +2755,91 @@ bool RISCVFrameLowering::canUseAsEpilogue(const MachineBasicBlock &MBB) const {
          llvm::count_if(SuccMBB->instrs(), [](const MachineInstr &MI) {
            return !MI.isDebugInstr();
          }) == 1;
+}
+
+bool RISCVFrameLowering::enableSeparateCSRShrinkWrapping(
+    const MachineFunction &MF) const {
+  // Only do it when optimizing for speed, as it may increase code size.
+  if (!enableShrinkWrapping(MF) || MF.getFunction().hasOptSize())
+    return false;
+
+  // Interrupt handlers, push/pop and the save/restore libcalls handle all
+  // callee-saved registers together.
+  const auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
+  return MF.getFunction().getCallingConv() != CallingConv::GHC &&
+         !MF.getFunction().hasFnAttribute("interrupt") &&
+         !RVFI->isPushable(MF) && !RVFI->useSaveRestoreLibCalls(MF);
+}
+
+bool RISCVFrameLowering::canShrinkWrapCSRSeparately(const MachineFunction &MF,
+                                                    MCRegister Reg) const {
+  if (!enableSeparateCSRShrinkWrapping(MF))
+    return false;
+
+  // Only handle scalar registers, which emitPrologue and emitEpilogue expect
+  // to be saved and restored with a single instruction each.
+  if (!RISCV::GPRRegClass.contains(Reg) && !RISCV::FPR64RegClass.contains(Reg) &&
+      !RISCV::FPR32RegClass.contains(Reg) &&
+      !RISCV::FPR16RegClass.contains(Reg))
+    return false;
+
+  // The return address, frame pointer and base pointer are set up and used by
+  // the prologue/epilogue.
+  if (Reg == RAReg || (hasFP(MF) && Reg == FPReg) ||
+      (hasBP(MF) && Reg == RISCVABI::getBPReg()))
+    return false;
+
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  if (!MFI.isCalleeSavedInfoValid())
+    return true;
+
+  // The separate saves and restores address their spill slots relative to the
+  // stack pointer once the whole frame is allocated. Like GCC, only do this
+  // when the offsets are small, and the frame contains no scalable objects.
+  if (hasRVVFrameObject(MF) || !isInt<12>(MFI.estimateStackSize(MF)))
+    return false;
+
+  // The spill slot must be a regular one, not one managed by the libcalls or
+  // push/pop.
+  for (const CalleeSavedInfo &CS : MFI.getCalleeSavedInfo())
+    if (CS.getReg() == Reg)
+      return !MFI.isFixedObjectIndex(CS.getFrameIdx());
+  return false;
+}
+
+void RISCVFrameLowering::emitSeparateCSRCFI(MachineBasicBlock &MBB,
+                                            MachineBasicBlock::iterator MBBI,
+                                            ArrayRef<CalleeSavedInfo> CSI,
+                                            bool IsSave) const {
+  MachineFunction &MF = *MBB.getParent();
+  if (!needsDwarfCFI(MF))
+    return;
+
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  CFIInstBuilder CFIBuilder(MBB, MBBI,
+                            IsSave ? MachineInstr::FrameSetup
+                                   : MachineInstr::FrameDestroy);
+  for (const CalleeSavedInfo &CS : CSI) {
+    if (IsSave)
+      CFIBuilder.buildOffset(CS.getReg(),
+                             MFI.getObjectOffset(CS.getFrameIdx()));
+    else
+      CFIBuilder.buildRestore(CS.getReg());
+  }
+}
+
+bool RISCVFrameLowering::enableCFIFixup(const MachineFunction &MF) const {
+  // CFIFixup expects the callee-saved register saves and restores to be part
+  // of the prologue and epilogue.
+  return TargetFrameLowering::enableCFIFixup(MF) &&
+         !MF.getFrameInfo().isShrinkWrappedSeparately();
+}
+
+bool RISCVFrameLowering::enableCFIInstrInserter(
+    const MachineFunction &MF) const {
+  // CFIInstrInserter handles the functions CFIFixup cannot handle.
+  return !MF.getTarget().Options.EnableCFIFixup ||
+         MF.getFrameInfo().isShrinkWrappedSeparately();
 }
 
 bool RISCVFrameLowering::isSupportedStackID(TargetStackID::Value ID) const {
