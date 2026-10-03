@@ -187,6 +187,9 @@ class NewShrinkWrapImpl {
   /// \p Pro, which the epilogue must come after.
   SmallVector<MachineBasicBlock *, 16> getRestoreBlocks(MachineBasicBlock *Pro);
 
+  /// See forwardReturnCopies.
+  bool needsFrameNotForCSRDefs(const MachineBasicBlock &MBB);
+
   /// Make the paths that only need the frame to pass the return value in a
   /// callee-saved register pass it in the return register instead.
   bool forwardReturnCopies();
@@ -472,6 +475,35 @@ static MachineOperand *findRenamableDef(MachineBasicBlock &MBB, MCRegister Src,
   return nullptr;
 }
 
+/// Return true if \p MBB needs the frame for a reason other than defining
+/// callee-saved registers and using them after these defs in \p MBB: a call,
+/// a stack access, or a use of a callee-saved register defined elsewhere.
+bool NewShrinkWrapImpl::needsFrameNotForCSRDefs(const MachineBasicBlock &MBB) {
+  SmallVector<MCRegister, 4> Defined;
+  for (const MachineInstr &MI : MBB) {
+    if (MI.isDebugInstr() || !useOrDefCSROrFI(MI, /*StackAddressUsed=*/false))
+      continue;
+    if (MI.isCall() || MI.getOpcode() == FrameSetupOpcode ||
+        MI.getOpcode() == FrameDestroyOpcode)
+      return true;
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isFI() || MO.isRegMask())
+        return true;
+      if (!MO.isReg() || !MO.getReg() || MO.isDef() || !MO.readsReg())
+        continue;
+      if (RCI->getLastCalleeSavedAlias(MO.getReg()) &&
+          none_of(Defined, [&](MCRegister R) {
+            return TRI->regsOverlap(R, MO.getReg());
+          }))
+        return true;
+    }
+    for (const MachineOperand &MO : MI.operands())
+      if (MO.isReg() && MO.isDef() && MO.getReg())
+        Defined.push_back(MO.getReg().asMCReg());
+  }
+  return false;
+}
+
 /// The return value is often assigned to a callee-saved register, because it
 /// is live across a call on some path. The other paths then write that
 /// register, and need the frame, only to pass the return value:
@@ -533,6 +565,17 @@ bool NewShrinkWrapImpl::forwardReturnCopies() {
     SmallVector<Forward, 4> Forwards;
     for (MachineBasicBlock *Pred : Ret->predecessors()) {
       if (Pred == Ret || Pred->succ_size() != 1 || !canRedirect(*Pred))
+        continue;
+      // If a block that needs the frame for another reason dominates Pred, so
+      // does the prologue, and Pred runs with the frame anyway. Forwarding
+      // would only add a branch. Ret and its other predecessors may not need
+      // the frame after forwarding, and sinkCSRDefs may move the defs of
+      // callee-saved registers, so these blocks do not count.
+      if (any_of(FrameBlocks, [&](MachineBasicBlock *FrameMBB) {
+            return FrameMBB != Ret && !Ret->isPredecessor(FrameMBB) &&
+                   MDT->dominates(FrameMBB, Pred) &&
+                   needsFrameNotForCSRDefs(*FrameMBB);
+          }))
         continue;
       Forward F{Pred, Pred->getLogicalFallThrough(), {}};
       for (auto [Dst, Src] : Copies) {
@@ -1741,15 +1784,23 @@ bool NewShrinkWrapImpl::run(MachineFunction &Fn) {
       TRI->requiresRegisterScavenging(*MF) ? new RegScavenger() : nullptr);
   RS = OwnedRS.get();
 
-  bool Changed = forwardReturnCopies();
-  if (Changed)
-    recomputeAnalyses();
-
   if (!collectFrameBlocks())
-    return Changed;
+    return false;
+  bool Changed = false;
   while (sinkCSRDefs()) {
     Changed = true;
     collectFrameBlocks();
+  }
+
+  // Forward the return values once the blocks needing the frame are known,
+  // see forwardReturnCopies. This changes the CFG, and may let sinkCSRDefs
+  // move PRO further down.
+  if (forwardReturnCopies()) {
+    Changed = true;
+    recomputeAnalyses();
+    collectFrameBlocks();
+    while (sinkCSRDefs())
+      collectFrameBlocks();
   }
 
   MachineBasicBlock *Save = &MF->front();

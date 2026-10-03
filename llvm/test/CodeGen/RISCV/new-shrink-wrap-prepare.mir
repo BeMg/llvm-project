@@ -68,6 +68,12 @@
 # POINTS:       savePoint:
 # POINTS-NEXT:    - point: '%bb.2'
 
+# forward_return_in_frame: like forward_return, but the entry block calls a
+# function, so bb.1 runs with the frame anyway. Its return value is not
+# forwarded, which would only add a branch, and bb.3 is not split.
+# POINTS-LABEL: name: forward_return_in_frame
+# POINTS-NOT:   savePoint:
+
 --- |
   target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"
   target triple = "riscv64"
@@ -245,6 +251,22 @@
 
   exit:                                             ; preds = %load, %entry
     ret i64 0
+  }
+
+  ; Function Attrs: nounwind
+  define i64 @forward_return_in_frame(i64 %a) #1 {
+  entry:
+    call void @g(i64 %a)
+    %c = icmp eq i64 %a, 0
+    br i1 %c, label %ret, label %call
+
+  call:                                             ; preds = %entry
+    %x = call i64 @f(i64 %a)
+    br label %ret
+
+  ret:                                              ; preds = %call, %entry
+    %r = phi i64 [ 7, %entry ], [ %x, %call ]
+    ret i64 %r
   }
 
   attributes #0 = { noreturn }
@@ -941,5 +963,81 @@ body:             |
 
   bb.3.exit:
     $x10 = COPY $x0
+    PseudoRET implicit $x10
+...
+---
+name:            forward_return_in_frame
+alignment:       4
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$x10' }
+frameInfo:
+  maxAlignment:    1
+  adjustsStack:    true
+  hasCalls:        true
+  maxCallFrameSize: 0
+body:             |
+  ; CHECK-LABEL: name: forward_return_in_frame
+  ; CHECK: bb.0.entry:
+  ; CHECK-NEXT:   successors: %bb.1(0x30000000), %bb.2(0x50000000)
+  ; CHECK-NEXT:   liveins: $x10
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT:   renamable $x9 = COPY $x10
+  ; CHECK-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $x2, implicit $x2
+  ; CHECK-NEXT:   PseudoCALL target-flags(riscv-call) @g, csr_ilp32_lp64, implicit-def dead $x1, implicit $x10, implicit-def $x2
+  ; CHECK-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def dead $x2, implicit $x2
+  ; CHECK-NEXT:   BNE renamable $x9, $x0, %bb.2
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT: bb.1:
+  ; CHECK-NEXT:   successors: %bb.3(0x80000000)
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT:   renamable $x8 = ADDI $x0, 7
+  ; CHECK-NEXT:   PseudoBR %bb.3
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT: bb.2.call:
+  ; CHECK-NEXT:   successors: %bb.3(0x80000000)
+  ; CHECK-NEXT:   liveins: $x9
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $x2, implicit $x2
+  ; CHECK-NEXT:   $x10 = COPY killed renamable $x9
+  ; CHECK-NEXT:   PseudoCALL target-flags(riscv-call) @f, csr_ilp32_lp64, implicit-def dead $x1, implicit $x10, implicit-def $x2, implicit-def $x10
+  ; CHECK-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def dead $x2, implicit $x2
+  ; CHECK-NEXT:   renamable $x8 = COPY $x10
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT: bb.3.ret:
+  ; CHECK-NEXT:   liveins: $x8
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT:   $x10 = COPY killed renamable $x8
+  ; CHECK-NEXT:   PseudoRET implicit $x10
+  bb.0.entry:
+    successors: %bb.1(0x30000000), %bb.2(0x50000000)
+    liveins: $x10
+
+    renamable $x9 = COPY $x10
+    ADJCALLSTACKDOWN 0, 0, implicit-def dead $x2, implicit $x2
+    PseudoCALL target-flags(riscv-call) @g, csr_ilp32_lp64, implicit-def dead $x1, implicit $x10, implicit-def $x2
+    ADJCALLSTACKUP 0, 0, implicit-def dead $x2, implicit $x2
+    BNE renamable $x9, $x0, %bb.2
+
+  bb.1:
+    renamable $x8 = ADDI $x0, 7
+    PseudoBR %bb.3
+
+  bb.2.call:
+    liveins: $x9
+
+    ADJCALLSTACKDOWN 0, 0, implicit-def dead $x2, implicit $x2
+    $x10 = COPY killed renamable $x9
+    PseudoCALL target-flags(riscv-call) @f, csr_ilp32_lp64, implicit-def dead $x1, implicit $x10, implicit-def $x2, implicit-def $x10
+    ADJCALLSTACKUP 0, 0, implicit-def dead $x2, implicit $x2
+    renamable $x8 = COPY $x10
+
+  bb.3.ret:
+    liveins: $x8
+
+    $x10 = COPY killed renamable $x8
     PseudoRET implicit $x10
 ...
