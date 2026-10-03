@@ -179,8 +179,8 @@ define i32 @separate(i32 %x, i32 %y) {
 ; NEW-NEXT:    beqz a2, .LBB2_2
 ; NEW-NEXT:  # %bb.1: # %b
 ; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s2, -32
 ; NEW-NEXT:    call f
 ; NEW-NEXT:    mv s1, a0
@@ -192,8 +192,8 @@ define i32 @separate(i32 %x, i32 %y) {
 ; NEW-NEXT:    add s0, s2, s0
 ; NEW-NEXT:    addw a0, s0, a0
 ; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s2
 ; NEW-NEXT:    j .LBB2_3
 ; NEW-NEXT:  .LBB2_2: # %a
@@ -280,10 +280,10 @@ define i32 @separate_loop(i32 %n, i32 %x) {
 ; NEW-NEXT:    beqz a1, .LBB3_4
 ; NEW-NEXT:  # %bb.1: # %preheader
 ; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s2, -32
 ; NEW-NEXT:    li s1, 0
 ; NEW-NEXT:    li s0, 0

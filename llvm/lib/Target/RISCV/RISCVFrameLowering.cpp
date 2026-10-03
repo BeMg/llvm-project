@@ -2823,11 +2823,28 @@ void RISCVFrameLowering::emitSeparateCSRCFI(MachineBasicBlock &MBB,
   if (!needsDwarfCFI(MF))
     return;
 
+  // Put the CFI of each register right after its save or restore, so that
+  // passes merging identical code, such as tail merging in BranchFolding,
+  // which do not compare CFI instructions, keep the CFI with the instruction
+  // it describes. The saves are at the start of MBB, before MBBI, and the
+  // restores right before MBBI.
   const MachineFrameInfo &MFI = MF.getFrameInfo();
-  CFIInstBuilder CFIBuilder(MBB, MBBI,
-                            IsSave ? MachineInstr::FrameSetup
-                                   : MachineInstr::FrameDestroy);
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  auto FindSaveOrRestore = [&](const CalleeSavedInfo &CS) {
+    for (MachineBasicBlock::iterator I = MBBI; I != MBB.begin();) {
+      --I;
+      int FI;
+      Register Reg = IsSave ? TII.isStoreToStackSlot(*I, FI)
+                            : TII.isLoadFromStackSlot(*I, FI);
+      if (Reg == CS.getReg() && FI == CS.getFrameIdx())
+        return std::next(I);
+    }
+    return MBBI;
+  };
   for (const CalleeSavedInfo &CS : CSI) {
+    CFIInstBuilder CFIBuilder(MBB, FindSaveOrRestore(CS),
+                              IsSave ? MachineInstr::FrameSetup
+                                     : MachineInstr::FrameDestroy);
     if (IsSave)
       CFIBuilder.buildOffset(CS.getReg(),
                              MFI.getObjectOffset(CS.getFrameIdx()));

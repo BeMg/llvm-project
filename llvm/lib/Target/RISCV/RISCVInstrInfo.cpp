@@ -1937,6 +1937,23 @@ int RISCVInstrInfo::getJumpTableIndex(const MachineInstr &MI) const {
   return -1;
 }
 
+bool RISCVInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
+                                          const MachineBasicBlock *MBB,
+                                          const MachineFunction &MF) const {
+  if (TargetInstrInfo::isSchedulingBoundary(MI, MBB, MF))
+    return true;
+
+  // The saves and restores of separately shrink-wrapped callee-saved
+  // registers are each followed by their CFI. Do not move other instructions
+  // between them: passes merging identical code, such as tail merging in
+  // BranchFolding, do not compare CFI instructions, and could then move the
+  // CFI to a block where the register is not saved. The prologue and
+  // epilogue are kept in place by their updates of the stack pointer.
+  return MF.getFrameInfo().isShrinkWrappedSeparately() &&
+         ((MI.getFlag(MachineInstr::FrameSetup) && MI.mayStore()) ||
+          (MI.getFlag(MachineInstr::FrameDestroy) && MI.mayLoad()));
+}
+
 // If the operation has a predicated pseudo instruction, return the pseudo
 // instruction opcode. Otherwise, return RISCV::INSTRUCTION_LIST_END.
 // TODO: Support more operations.
