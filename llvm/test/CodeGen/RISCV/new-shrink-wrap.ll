@@ -911,7 +911,6 @@ ret:
 ; %entry and %join runs without the frame (Stockfish's Position::is_draw).
 declare ptr @gen(ptr, ptr)
 define i32 @stack_use_join(ptr %pos, i32 %ply) {
-;
 ; OLD-LABEL: stack_use_join:
 ; OLD:       # %bb.0: # %entry
 ; OLD-NEXT:    addi sp, sp, -2032
@@ -1046,5 +1045,181 @@ join:
   br label %ret
 ret:
   %r = phi i32 [1, %cold], [%z, %join]
+  ret i32 %r
+}
+
+; %big is reached from the jump table, without s1/s2, and from %other, with
+; them. Their saves go on the edge from the jump table, which is split by
+; replacing %big in the jump table (SEAL's dot_product_mod).
+define i32 @separate_jump_table(i32 %n, i32 %x, i32 %y) {
+; OLD-LABEL: separate_jump_table:
+; OLD:       # %bb.0: # %entry
+; OLD-NEXT:    addi sp, sp, -32
+; OLD-NEXT:    .cfi_def_cfa_offset 32
+; OLD-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
+; OLD-NEXT:    .cfi_offset ra, -8
+; OLD-NEXT:    .cfi_offset s0, -16
+; OLD-NEXT:    .cfi_offset s1, -24
+; OLD-NEXT:    .cfi_offset s2, -32
+; OLD-NEXT:    mv s0, a2
+; OLD-NEXT:    sext.w a0, a0
+; OLD-NEXT:    li a2, 4
+; OLD-NEXT:    bltu a2, a0, .LBB11_6
+; OLD-NEXT:  # %bb.1: # %entry
+; OLD-NEXT:    slli a0, a0, 2
+; OLD-NEXT:    lui a2, %hi(.LJTI11_0)
+; OLD-NEXT:    addi a2, a2, %lo(.LJTI11_0)
+; OLD-NEXT:    add a0, a2, a0
+; OLD-NEXT:    lw a0, 0(a0)
+; OLD-NEXT:    jr a0
+; OLD-NEXT:  .LBB11_2: # %a
+; OLD-NEXT:    addiw a0, a1, 1
+; OLD-NEXT:    j .LBB11_8
+; OLD-NEXT:  .LBB11_3: # %d
+; OLD-NEXT:    xor a0, a1, s0
+; OLD-NEXT:    j .LBB11_8
+; OLD-NEXT:  .LBB11_4: # %b
+; OLD-NEXT:    or a0, a1, s0
+; OLD-NEXT:    j .LBB11_8
+; OLD-NEXT:  .LBB11_5: # %c
+; OLD-NEXT:    subw a0, a1, s0
+; OLD-NEXT:    j .LBB11_8
+; OLD-NEXT:  .LBB11_6: # %other
+; OLD-NEXT:    mv a0, a1
+; OLD-NEXT:    call f
+; OLD-NEXT:    addw a1, a0, s0
+; OLD-NEXT:  .LBB11_7: # %big
+; OLD-NEXT:    mv a0, a1
+; OLD-NEXT:    mv s2, a1
+; OLD-NEXT:    call f
+; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    mv a0, s0
+; OLD-NEXT:    call f
+; OLD-NEXT:    mv s0, a0
+; OLD-NEXT:    mv a0, s1
+; OLD-NEXT:    call f
+; OLD-NEXT:    add s0, s0, s2
+; OLD-NEXT:    addw a0, s0, a0
+; OLD-NEXT:  .LBB11_8: # %ret
+; OLD-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
+; OLD-NEXT:    .cfi_restore ra
+; OLD-NEXT:    .cfi_restore s0
+; OLD-NEXT:    .cfi_restore s1
+; OLD-NEXT:    .cfi_restore s2
+; OLD-NEXT:    addi sp, sp, 32
+; OLD-NEXT:    .cfi_def_cfa_offset 0
+; OLD-NEXT:    ret
+;
+; NEW-LABEL: separate_jump_table:
+; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    addi sp, sp, -32
+; NEW-NEXT:    .cfi_def_cfa_offset 32
+; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    mv s0, a2
+; NEW-NEXT:    sext.w a0, a0
+; NEW-NEXT:    li a2, 4
+; NEW-NEXT:    bltu a2, a0, .LBB11_7
+; NEW-NEXT:  # %bb.1: # %entry
+; NEW-NEXT:    slli a0, a0, 2
+; NEW-NEXT:    lui a2, %hi(.LJTI11_0)
+; NEW-NEXT:    addi a2, a2, %lo(.LJTI11_0)
+; NEW-NEXT:    add a0, a2, a0
+; NEW-NEXT:    lw a0, 0(a0)
+; NEW-NEXT:    jr a0
+; NEW-NEXT:  .LBB11_2: # %a
+; NEW-NEXT:    addiw a0, a1, 1
+; NEW-NEXT:    j .LBB11_9
+; NEW-NEXT:  .LBB11_3:
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset s2, -32
+; NEW-NEXT:    j .LBB11_8
+; NEW-NEXT:  .LBB11_4: # %c
+; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    .cfi_restore s2
+; NEW-NEXT:    subw a0, a1, s0
+; NEW-NEXT:    j .LBB11_9
+; NEW-NEXT:  .LBB11_5: # %d
+; NEW-NEXT:    xor a0, a1, s0
+; NEW-NEXT:    j .LBB11_9
+; NEW-NEXT:  .LBB11_6: # %b
+; NEW-NEXT:    or a0, a1, s0
+; NEW-NEXT:    j .LBB11_9
+; NEW-NEXT:  .LBB11_7: # %other
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset s2, -32
+; NEW-NEXT:    mv a0, a1
+; NEW-NEXT:    call f
+; NEW-NEXT:    addw a1, a0, s0
+; NEW-NEXT:  .LBB11_8: # %big
+; NEW-NEXT:    mv a0, a1
+; NEW-NEXT:    mv s2, a1
+; NEW-NEXT:    call f
+; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    mv a0, s0
+; NEW-NEXT:    call f
+; NEW-NEXT:    mv s0, a0
+; NEW-NEXT:    mv a0, s1
+; NEW-NEXT:    call f
+; NEW-NEXT:    add s0, s0, s2
+; NEW-NEXT:    addw a0, s0, a0
+; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore s2
+; NEW-NEXT:  .LBB11_9: # %ret
+; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    addi sp, sp, 32
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:    ret
+entry:
+  switch i32 %n, label %other [
+    i32 0, label %a
+    i32 1, label %b
+    i32 2, label %c
+    i32 3, label %d
+    i32 4, label %big
+  ]
+a:
+  %ra = add i32 %x, 1
+  br label %ret
+b:
+  %rb = or i32 %x, %y
+  br label %ret
+c:
+  %rc = sub i32 %x, %y
+  br label %ret
+d:
+  %rd = xor i32 %x, %y
+  br label %ret
+other:
+  %o1 = call i32 @f(i32 %x)
+  %o2 = add i32 %o1, %y
+  br label %big
+big:
+  %v = phi i32 [ %x, %entry ], [ %o2, %other ]
+  %b1 = call i32 @f(i32 %v)
+  %b2 = call i32 @f(i32 %y)
+  %b3 = call i32 @f(i32 %b1)
+  %s1 = add i32 %b2, %b3
+  %s2 = add i32 %s1, %v
+  br label %ret
+ret:
+  %r = phi i32 [ %ra, %a ], [ %rb, %b ], [ %rc, %c ], [ %rd, %d ], [ %s2, %big ]
   ret i32 %r
 }

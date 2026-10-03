@@ -1823,13 +1823,28 @@ static bool isJumpTableLoad(const MachineInstr &MI) {
   });
 }
 
+// Return the instruction defining \p Reg read by \p User: the unique def of a
+// virtual register or, after register allocation, the last instruction before
+// \p User in its block that writes \p Reg.
+static const MachineInstr *getRegDef(const MachineInstr &User, Register Reg) {
+  const MachineFunction &MF = *User.getMF();
+  if (Reg.isVirtual())
+    return MF.getRegInfo().getUniqueVRegDef(Reg);
+  if (!Reg.isPhysical())
+    return nullptr;
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  for (const MachineInstr &MI :
+       make_range(std::next(User.getReverseIterator()),
+                  User.getParent()->instr_rend()))
+    if (MI.modifiesRegister(Reg, TRI))
+      return &MI;
+  return nullptr;
+}
+
 // We want this instruction to be loading the base address of a jump table into
 // a register. This can be PseudoMovAddr/PseudoLLA/LUI(+ADDI)/QC_E_LI.
-static int getJumpTableIndexFromBase(const MachineRegisterInfo &MRI,
-                                     Register Reg) {
-  if (!Reg.isVirtual())
-    return -1;
-  const MachineInstr *MI = MRI.getUniqueVRegDef(Reg);
+static int getJumpTableIndexFromBase(const MachineInstr &User, Register Reg) {
+  const MachineInstr *MI = getRegDef(User, Reg);
   if (!MI)
     return -1;
 
@@ -1842,11 +1857,9 @@ static int getJumpTableIndexFromBase(const MachineRegisterInfo &MRI,
 
 // This instruction is used as the base address of a jump table load. We expect
 // it to be adding the jump table base address to an index that may be scaled.
-static int getJumpTableIndexFromLoadAddr(const MachineRegisterInfo &MRI,
+static int getJumpTableIndexFromLoadAddr(const MachineInstr &User,
                                          Register Reg) {
-  if (!Reg.isVirtual())
-    return -1;
-  const MachineInstr *MI = MRI.getUniqueVRegDef(Reg);
+  const MachineInstr *MI = getRegDef(User, Reg);
   if (!MI)
     return -1;
 
@@ -1858,15 +1871,15 @@ static int getJumpTableIndexFromLoadAddr(const MachineRegisterInfo &MRI,
     // Only the index should be scaled so we just check the unscaled operand for
     // the base address.
     // TODO: Can the address be SHXADD_UW?
-    JTI = getJumpTableIndexFromBase(MRI, MI->getOperand(2).getReg());
+    JTI = getJumpTableIndexFromBase(*MI, MI->getOperand(2).getReg());
     if (JTI >= 0)
       return JTI;
     break;
   case RISCV::ADD:
-    JTI = getJumpTableIndexFromBase(MRI, MI->getOperand(1).getReg());
+    JTI = getJumpTableIndexFromBase(*MI, MI->getOperand(1).getReg());
     if (JTI >= 0)
       return JTI;
-    JTI = getJumpTableIndexFromBase(MRI, MI->getOperand(2).getReg());
+    JTI = getJumpTableIndexFromBase(*MI, MI->getOperand(2).getReg());
     if (JTI >= 0)
       return JTI;
     break;
@@ -1886,17 +1899,15 @@ static int getJumpTableIndexFromLoadAddr(const MachineRegisterInfo &MRI,
 //   %target = ADD %entry, %base
 //   PseudoBRIND %target, 0
 //
+// After register allocation, the registers are physical, and the defs are
+// found in the block of PseudoBRIND (for example by shrink-wrapping, which
+// splits the edges of jump tables).
 int RISCVInstrInfo::getJumpTableIndex(const MachineInstr &MI) const {
   if (MI.getOpcode() != RISCV::PseudoBRIND &&
       MI.getOpcode() != RISCV::PseudoBRINDX7)
     return -1;
 
-  Register Reg = MI.getOperand(0).getReg();
-  if (!Reg.isVirtual())
-    return -1;
-
-  const MachineRegisterInfo &MRI = MI.getMF()->getRegInfo();
-  MachineInstr *Def = MRI.getUniqueVRegDef(Reg);
+  const MachineInstr *Def = getRegDef(MI, MI.getOperand(0).getReg());
   if (!Def)
     return -1;
 
@@ -1910,7 +1921,7 @@ int RISCVInstrInfo::getJumpTableIndex(const MachineInstr &MI) const {
     if (!isJumpTableLoad(*Def))
       return -1;
 
-    JTI = getJumpTableIndexFromLoadAddr(MRI, Def->getOperand(1).getReg());
+    JTI = getJumpTableIndexFromLoadAddr(*Def, Def->getOperand(1).getReg());
     if (JTI >= 0)
       return JTI;
     break;
@@ -1920,15 +1931,15 @@ int RISCVInstrInfo::getJumpTableIndex(const MachineInstr &MI) const {
     if (!isJumpTableLoad(*Def))
       return -1;
 
-    JTI = getJumpTableIndexFromBase(MRI, Def->getOperand(1).getReg());
+    JTI = getJumpTableIndexFromBase(*Def, Def->getOperand(1).getReg());
     if (JTI >= 0)
       return JTI;
     break;
   case RISCV::ADD:
-    JTI = getJumpTableIndexFromBase(MRI, Def->getOperand(1).getReg());
+    JTI = getJumpTableIndexFromBase(*Def, Def->getOperand(1).getReg());
     if (JTI >= 0)
       return JTI;
-    JTI = getJumpTableIndexFromBase(MRI, Def->getOperand(2).getReg());
+    JTI = getJumpTableIndexFromBase(*Def, Def->getOperand(2).getReg());
     if (JTI >= 0)
       return JTI;
     break;
