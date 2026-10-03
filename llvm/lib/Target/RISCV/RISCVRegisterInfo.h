@@ -79,6 +79,9 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
     return true;
   }
 
+  bool
+  excludeCSRsFromSchedPressureLimit(const MachineFunction &MF) const override;
+
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
 
   const TargetRegisterClass *

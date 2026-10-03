@@ -454,6 +454,11 @@ protected:
   /// with its max pressure in the currently scheduled regions.
   std::vector<PressureChange> RegionCriticalPSets;
 
+  /// For each pressure set, the weight of its allocatable callee-saved
+  /// registers. Computed on first use, see
+  /// TargetRegisterInfo::excludeCSRsFromSchedPressureLimit.
+  std::vector<unsigned> CSRPressure;
+
   /// The top of the unscheduled zone.
   IntervalPressure TopPressure;
   RegPressureTracker TopRPTracker;
@@ -544,6 +549,10 @@ protected:
   // Lesser helpers...
 
   void initRegPressure();
+
+  bool exceedsReducedLimit() const;
+
+  void restoreOriginalOrder();
 
   void updatePressureDiffs(ArrayRef<VRegMaskOrUnit> LiveUses);
 

@@ -238,6 +238,7 @@ void RegPressureTracker::reset() {
 
   CurrSetPressure.clear();
   LiveThruPressure.clear();
+  LimitReduction.clear();
   P.MaxSetPressure.clear();
 
   if (RequireIntervals)
@@ -962,11 +963,18 @@ void RegPressureTracker::advance() {
   advance(RegOpers);
 }
 
+unsigned RegPressureTracker::getPSetLimit(unsigned PSet) const {
+  unsigned Limit = RCI->getRegPressureSetLimit(PSet);
+  if (PSet < LimitReduction.size() && LimitReduction[PSet] < Limit)
+    Limit -= LimitReduction[PSet];
+  return Limit;
+}
+
 /// Find the max change in excess pressure across all sets.
 static void computeExcessPressureDelta(ArrayRef<unsigned> OldPressureVec,
                                        ArrayRef<unsigned> NewPressureVec,
                                        RegPressureDelta &Delta,
-                                       const RegisterClassInfo *RCI,
+                                       const RegPressureTracker &RPTracker,
                                        ArrayRef<unsigned> LiveThruPressureVec) {
   Delta.Excess = PressureChange();
   for (unsigned i = 0, e = OldPressureVec.size(); i < e; ++i) {
@@ -976,7 +984,7 @@ static void computeExcessPressureDelta(ArrayRef<unsigned> OldPressureVec,
     if (!PDiff) // No change in this set in the common case.
       continue;
     // Only consider change beyond the limit.
-    unsigned Limit = RCI->getRegPressureSetLimit(i);
+    unsigned Limit = RPTracker.getPSetLimit(i);
     if (!LiveThruPressureVec.empty())
       Limit += LiveThruPressureVec[i];
 
@@ -1111,7 +1119,7 @@ getMaxUpwardPressureDelta(const MachineInstr *MI, PressureDiff *PDiff,
 
   bumpUpwardPressure(MI);
 
-  computeExcessPressureDelta(SavedPressure, CurrSetPressure, Delta, RCI,
+  computeExcessPressureDelta(SavedPressure, CurrSetPressure, Delta, *this,
                              LiveThruPressure);
   computeMaxPressureDelta(SavedMaxPressure, P.MaxSetPressure, CriticalPSets,
                           MaxPressureLimit, Delta);
@@ -1177,7 +1185,7 @@ getUpwardPressureDelta(const MachineInstr *MI, /*const*/ PressureDiff &PDiff,
        PDiffI != PDiffE && PDiffI->isValid(); ++PDiffI) {
 
     unsigned PSetID = PDiffI->getPSet();
-    unsigned Limit = RCI->getRegPressureSetLimit(PSetID);
+    unsigned Limit = getPSetLimit(PSetID);
     if (!LiveThruPressure.empty())
       Limit += LiveThruPressure[PSetID];
 
@@ -1360,7 +1368,7 @@ getMaxDownwardPressureDelta(const MachineInstr *MI, RegPressureDelta &Delta,
 
   bumpDownwardPressure(MI);
 
-  computeExcessPressureDelta(SavedPressure, CurrSetPressure, Delta, RCI,
+  computeExcessPressureDelta(SavedPressure, CurrSetPressure, Delta, *this,
                              LiveThruPressure);
   computeMaxPressureDelta(SavedMaxPressure, P.MaxSetPressure, CriticalPSets,
                           MaxPressureLimit, Delta);

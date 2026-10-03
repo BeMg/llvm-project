@@ -1150,20 +1150,20 @@ define <8 x i64> @v8xi64_exact(i64 %a, i64 %b, i64 %c, i64 %d, i64 %e, i64 %f, i
 ; RV32-NEXT:    lw a0, 0(sp)
 ; RV32-NEXT:    vslide1down.vx v8, v10, a3
 ; RV32-NEXT:    lw a1, 16(sp)
-; RV32-NEXT:    lw a2, 4(sp)
 ; RV32-NEXT:    vmv.v.x v10, a0
+; RV32-NEXT:    lw a0, 4(sp)
 ; RV32-NEXT:    vmv.v.x v11, a1
-; RV32-NEXT:    lw a0, 20(sp)
-; RV32-NEXT:    vslide1down.vx v10, v10, a2
-; RV32-NEXT:    lw a1, 8(sp)
-; RV32-NEXT:    vslide1down.vx v11, v11, a0
-; RV32-NEXT:    lw a0, 24(sp)
-; RV32-NEXT:    vslide1down.vx v10, v10, a1
-; RV32-NEXT:    lw a1, 12(sp)
-; RV32-NEXT:    vslide1down.vx v11, v11, a0
-; RV32-NEXT:    lw a0, 28(sp)
-; RV32-NEXT:    vslide1down.vx v10, v10, a1
-; RV32-NEXT:    vslide1down.vx v11, v11, a0
+; RV32-NEXT:    lw a1, 20(sp)
+; RV32-NEXT:    vslide1down.vx v10, v10, a0
+; RV32-NEXT:    lw a0, 8(sp)
+; RV32-NEXT:    vslide1down.vx v11, v11, a1
+; RV32-NEXT:    lw a1, 24(sp)
+; RV32-NEXT:    vslide1down.vx v10, v10, a0
+; RV32-NEXT:    lw a0, 12(sp)
+; RV32-NEXT:    vslide1down.vx v11, v11, a1
+; RV32-NEXT:    lw a1, 28(sp)
+; RV32-NEXT:    vslide1down.vx v10, v10, a0
+; RV32-NEXT:    vslide1down.vx v11, v11, a1
 ; RV32-NEXT:    ret
 ;
 ; RV64V-LABEL: v8xi64_exact:

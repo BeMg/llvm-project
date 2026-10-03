@@ -151,10 +151,10 @@ define dso_local i32 @regpressure(i32 noundef %a0, i32 noundef %a1, i32 noundef 
 ; CHECK-NEXT:    call sink
 ; CHECK-NEXT:    c.add s2, s3
 ; CHECK-NEXT:    c.add s0, s1
-; CHECK-NEXT:    c.add s0, s2
 ; CHECK-NEXT:    c.add s9, s11
-; CHECK-NEXT:    c.add s0, s7
+; CHECK-NEXT:    c.add s0, s2
 ; CHECK-NEXT:    c.add s8, s10
+; CHECK-NEXT:    c.add s0, s7
 ; CHECK-NEXT:    c.add s0, s9
 ; CHECK-NEXT:    c.lwsp a1, 84(sp)
 ; CHECK-NEXT:    c.add s8, a1

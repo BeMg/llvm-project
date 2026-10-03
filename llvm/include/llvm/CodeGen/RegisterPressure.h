@@ -416,6 +416,10 @@ class RegPressureTracker {
   /// Live-through pressure.
   std::vector<unsigned> LiveThruPressure;
 
+  /// Reduction of the limit of each pressure set, for registers that are
+  /// expensive to use in this region. Empty if there is no reduction.
+  std::vector<unsigned> LimitReduction;
+
 public:
   RegPressureTracker(IntervalPressure &rp) : P(rp), RequireIntervals(true) {}
   RegPressureTracker(RegionPressure &rp) : P(rp), RequireIntervals(false) {}
@@ -468,6 +472,18 @@ public:
   /// Initialize the LiveThru pressure set based on the untied defs found in
   /// RPTracker.
   LLVM_ABI void initLiveThru(const RegPressureTracker &RPTracker);
+
+  /// Lower the limit of each pressure set by \p Reduction.
+  void setLimitReduction(ArrayRef<unsigned> Reduction) {
+    LimitReduction.assign(Reduction.begin(), Reduction.end());
+  }
+
+  bool hasLimitReduction(unsigned PSet) const {
+    return PSet < LimitReduction.size() && LimitReduction[PSet];
+  }
+
+  /// The pressure limit of \p PSet, without the live-through pressure.
+  LLVM_ABI unsigned getPSetLimit(unsigned PSet) const;
 
   /// Copy an existing live thru pressure result.
   void initLiveThru(ArrayRef<unsigned> PressureSet) {

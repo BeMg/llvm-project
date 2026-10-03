@@ -1485,6 +1485,28 @@ void ScheduleDAGMILive::initRegPressure() {
   BotRPTracker.init(&MF, RegClassInfo, LIS, BB, LiveRegionEnd,
                     ShouldTrackLaneMasks, false);
 
+  // Outside loops, a block does not run more often than the entry, so a
+  // callee-saved register that the schedule needs costs more than the
+  // schedule gains. Do not count these registers in the limits there.
+  if (MLI && !MLI->getLoopFor(BB) &&
+      TRI->excludeCSRsFromSchedPressureLimit(MF)) {
+    if (CSRPressure.empty()) {
+      CSRPressure.assign(TRI->getNumRegPressureSets(), 0);
+      for (unsigned PSet = 0, E = CSRPressure.size(); PSet != E; ++PSet) {
+        const TargetRegisterClass *RC =
+            TRI->getLargestRegClassForRegPressureSet(PSet);
+        if (!RC)
+          continue;
+        unsigned Weight = TRI->getRegClassWeight(RC).RegWeight;
+        for (const MCPhysReg *CSR = MRI.getCalleeSavedRegs(); *CSR; ++CSR)
+          if (RC->contains(*CSR) && MRI.isAllocatable(*CSR))
+            CSRPressure[PSet] += Weight;
+      }
+    }
+    TopRPTracker.setLimitReduction(CSRPressure);
+    BotRPTracker.setLimitReduction(CSRPressure);
+  }
+
   // Close the RPTracker to finalize live ins.
   RPTracker.closeRegion();
 
@@ -1534,7 +1556,7 @@ void ScheduleDAGMILive::initRegPressure() {
   const std::vector<unsigned> &RegionPressure =
     RPTracker.getPressure().MaxSetPressure;
   for (unsigned i = 0, e = RegionPressure.size(); i < e; ++i) {
-    unsigned Limit = RegClassInfo->getRegPressureSetLimit(i);
+    unsigned Limit = BotRPTracker.getPSetLimit(i);
     if (RegionPressure[i] > Limit) {
       LLVM_DEBUG(dbgs() << TRI->getRegPressureSetName(i) << " Limit " << Limit
                         << " Actual " << RegionPressure[i] << "\n");
@@ -1567,7 +1589,7 @@ updateScheduledPressure(const SUnit *SU,
           && NewMaxPressure[ID] <= (unsigned)std::numeric_limits<int16_t>::max())
         RegionCriticalPSets[CritIdx].setUnitInc(NewMaxPressure[ID]);
     }
-    unsigned Limit = RegClassInfo->getRegPressureSetLimit(ID);
+    unsigned Limit = BotRPTracker.getPSetLimit(ID);
     if (NewMaxPressure[ID] >= Limit - 2) {
       LLVM_DEBUG(dbgs() << "  " << TRI->getRegPressureSetName(ID) << ": "
                         << NewMaxPressure[ID]
@@ -1738,6 +1760,9 @@ void ScheduleDAGMILive::schedule() {
   }
   assert(CurrentTop == CurrentBottom && "Nonempty unscheduled zone.");
 
+  if (exceedsReducedLimit())
+    restoreOriginalOrder();
+
   placeDebugValues();
 
   LLVM_DEBUG({
@@ -1746,6 +1771,59 @@ void ScheduleDAGMILive::schedule() {
     dumpSchedule();
     dbgs() << '\n';
   });
+}
+
+/// Return true if the schedule needs more registers of a pressure set than its
+/// reduced limit (see TargetRegisterInfo::excludeCSRsFromSchedPressureLimit),
+/// but the original order does not. The new schedule would then need
+/// callee-saved registers that the original order does not need.
+bool ScheduleDAGMILive::exceedsReducedLimit() const {
+  if (!ShouldTrackPressure || ShouldTrackLaneMasks)
+    return false;
+  const std::vector<unsigned> &Orig = RPTracker.getPressure().MaxSetPressure;
+  const std::vector<unsigned> &Top = TopRPTracker.getPressure().MaxSetPressure;
+  const std::vector<unsigned> &Bot = BotRPTracker.getPressure().MaxSetPressure;
+  for (unsigned PSet = 0, E = Orig.size(); PSet != E; ++PSet) {
+    if (!BotRPTracker.hasLimitReduction(PSet))
+      continue;
+    unsigned Limit = BotRPTracker.getPSetLimit(PSet);
+    unsigned New = std::max(PSet < Top.size() ? Top[PSet] : 0,
+                            PSet < Bot.size() ? Bot[PSet] : 0);
+    if (Orig[PSet] <= Limit && New > Limit) {
+      LLVM_DEBUG(dbgs() << "Restore the original order: "
+                        << TRI->getRegPressureSetName(PSet) << " " << New
+                        << " > " << Limit << ", original " << Orig[PSet]
+                        << '\n');
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Move the instructions of the region back to their original order. The
+/// SUnits are in the original order. Like GCNSchedStage::modifyRegionSchedule,
+/// each instruction moves up to a cursor, so no instruction moves below its
+/// uses, which LiveIntervals::handleMove cannot handle.
+void ScheduleDAGMILive::restoreOriginalOrder() {
+  MachineBasicBlock::iterator Cursor = RegionBegin;
+  for (SUnit &SU : SUnits) {
+    MachineInstr *MI = SU.getInstr();
+    Cursor = skipDebugInstructionsForward(Cursor, RegionEnd);
+    if (MI->getIterator() == Cursor) {
+      // Earlier moves can leave the slot index of MI below the one of the
+      // instruction before it.
+      SlotIndex PrevIdx = LIS->getSlotIndexes()->getIndexBefore(*MI);
+      if (PrevIdx >= LIS->getInstructionIndex(*MI))
+        LIS->handleMove(*MI, /*UpdateFlags=*/true);
+      ++Cursor;
+      continue;
+    }
+    bool AtBegin = Cursor == RegionBegin;
+    BB->splice(Cursor, BB, MI);
+    LIS->handleMove(*MI, /*UpdateFlags=*/true);
+    if (AtBegin)
+      RegionBegin = MI->getIterator();
+  }
 }
 
 /// Build the DAG and setup three register pressure trackers.

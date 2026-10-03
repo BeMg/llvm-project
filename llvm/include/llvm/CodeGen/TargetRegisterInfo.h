@@ -892,6 +892,16 @@ public:
     return false;
   }
 
+  /// Return true if the pre-RA machine scheduler should not count the
+  /// callee-saved registers in the pressure limits of a block outside loops.
+  /// Such a block does not run more often than the function entry, so the
+  /// save and restore of a callee-saved register cost more than the
+  /// scheduling gains.
+  virtual bool
+  excludeCSRsFromSchedPressureLimit(const MachineFunction &MF) const {
+    return false;
+  }
+
   /// Scale the CSRFirstUseCost with this number.
   /// The scale is a percentage (e.g., 30 means 30% of the base cost).
   /// Target can tune and override this default value.
