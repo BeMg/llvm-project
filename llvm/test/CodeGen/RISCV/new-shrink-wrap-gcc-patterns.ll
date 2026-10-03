@@ -134,23 +134,21 @@ define dso_local void @drop(ptr noundef %self, ptr noundef %o) local_unnamed_add
 ; NEW-RA-NEXT:  .LBB0_2: # %if.then
 ; NEW-RA-NEXT:    addi sp, sp, -96
 ; NEW-RA-NEXT:    sd ra, 88(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s0, 80(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s1, 72(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s2, 64(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    mv s0, a0
+; NEW-RA-NEXT:    sd a0, 8(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    mv a0, a1
-; NEW-RA-NEXT:    mv s1, a1
+; NEW-RA-NEXT:    sd a1, 16(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    call class_name
-; NEW-RA-NEXT:    mv s2, a0
-; NEW-RA-NEXT:    mv a1, sp
-; NEW-RA-NEXT:    mv a0, s1
+; NEW-RA-NEXT:    sd a0, 0(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    addi a1, sp, 24
+; NEW-RA-NEXT:    ld a0, 16(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call describe
-; NEW-RA-NEXT:    ld a3, 8(s1)
+; NEW-RA-NEXT:    ld a0, 16(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a3, 8(a0)
 ; NEW-RA-NEXT:    lui a1, %hi(.L.str)
 ; NEW-RA-NEXT:    addi a1, a1, %lo(.L.str)
-; NEW-RA-NEXT:    mv a4, sp
-; NEW-RA-NEXT:    mv a0, s0
-; NEW-RA-NEXT:    mv a2, s2
+; NEW-RA-NEXT:    addi a4, sp, 24
+; NEW-RA-NEXT:    ld a0, 8(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 0(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call runtime_error
 entry:
   %buf = alloca [64 x i8], align 1
@@ -199,15 +197,7 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; OLD-NEXT:    addi sp, sp, -80
 ; OLD-NEXT:    .cfi_def_cfa_offset 80
 ; OLD-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
-; OLD-NEXT:    sd s0, 64(sp) # 8-byte Folded Spill
-; OLD-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
-; OLD-NEXT:    sd s2, 48(sp) # 8-byte Folded Spill
-; OLD-NEXT:    sd s3, 40(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    .cfi_offset ra, -8
-; OLD-NEXT:    .cfi_offset s0, -16
-; OLD-NEXT:    .cfi_offset s1, -24
-; OLD-NEXT:    .cfi_offset s2, -32
-; OLD-NEXT:    .cfi_offset s3, -40
 ; OLD-NEXT:    .cfi_remember_state
 ; OLD-NEXT:    ld a2, 8(a1)
 ; OLD-NEXT:    bne a2, a0, .LBB1_2
@@ -215,79 +205,74 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; OLD-NEXT:    lui a0, %hi(defaultOwner)
 ; OLD-NEXT:    ld a0, %lo(defaultOwner)(a0)
 ; OLD-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
-; OLD-NEXT:    ld s0, 64(sp) # 8-byte Folded Reload
-; OLD-NEXT:    ld s1, 56(sp) # 8-byte Folded Reload
-; OLD-NEXT:    ld s2, 48(sp) # 8-byte Folded Reload
-; OLD-NEXT:    ld s3, 40(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    .cfi_restore ra
-; OLD-NEXT:    .cfi_restore s0
-; OLD-NEXT:    .cfi_restore s1
-; OLD-NEXT:    .cfi_restore s2
-; OLD-NEXT:    .cfi_restore s3
 ; OLD-NEXT:    addi sp, sp, 80
 ; OLD-NEXT:    .cfi_def_cfa_offset 0
 ; OLD-NEXT:    tail _ZN10cSoftOwner8doInsertEP12cOwnedObject
 ; OLD-NEXT:  .LBB1_2: # %if.then
 ; OLD-NEXT:    .cfi_restore_state
-; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    sd a0, 16(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    li a0, 200
-; OLD-NEXT:    mv s2, a1
+; OLD-NEXT:    sd a1, 32(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    call __cxa_allocate_exception
-; OLD-NEXT:    ld a1, 0(s2)
+; OLD-NEXT:    ld a1, 32(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld a1, 0(a1)
 ; OLD-NEXT:    ld a1, 16(a1)
-; OLD-NEXT:    mv s0, a0
+; OLD-NEXT:    sd a0, 24(sp) # 8-byte Folded Spill
 ; OLD-NEXT:  .Ltmp0: # EH_LABEL
-; OLD-NEXT:    mv s3, s2
-; OLD-NEXT:    mv a0, s2
+; OLD-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    jalr a1
+; OLD-NEXT:    sd a0, 8(sp) # 8-byte Folded Spill
 ; OLD-NEXT:  .Ltmp1: # EH_LABEL
 ; OLD-NEXT:  # %bb.3: # %invoke.cont
-; OLD-NEXT:    mv s2, a0
-; OLD-NEXT:    mv a1, s3
-; OLD-NEXT:    ld a0, 0(s3)
+; OLD-NEXT:    ld a1, 32(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld a0, 0(a1)
 ; OLD-NEXT:    ld a2, 24(a0)
 ; OLD-NEXT:  .Ltmp3: # EH_LABEL
-; OLD-NEXT:    addi a0, sp, 8
+; OLD-NEXT:    addi a0, sp, 40
 ; OLD-NEXT:    jalr a2
 ; OLD-NEXT:  .Ltmp4: # EH_LABEL
 ; OLD-NEXT:  # %bb.4: # %invoke.cont5
-; OLD-NEXT:    ld a4, 8(sp)
-; OLD-NEXT:    li s3, 1
+; OLD-NEXT:    ld a4, 40(sp)
+; OLD-NEXT:    li a0, 1
+; OLD-NEXT:    sd a0, 0(sp) # 8-byte Folded Spill
 ; OLD-NEXT:  .Ltmp6: # EH_LABEL
 ; OLD-NEXT:    lui a2, %hi(.L.str.1)
 ; OLD-NEXT:    addi a2, a2, %lo(.L.str.1)
-; OLD-NEXT:    mv a0, s0
-; OLD-NEXT:    mv a1, s1
-; OLD-NEXT:    mv a3, s2
+; OLD-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld a1, 16(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld a3, 8(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    call _ZN13cRuntimeErrorC1EPKvPKcz
 ; OLD-NEXT:  .Ltmp7: # EH_LABEL
 ; OLD-NEXT:  # %bb.5: # %invoke.cont8
 ; OLD-NEXT:  .Ltmp8: # EH_LABEL
 ; OLD-NEXT:    lui a1, %hi(_ZTI13cRuntimeError)
 ; OLD-NEXT:    addi a1, a1, %lo(_ZTI13cRuntimeError)
-; OLD-NEXT:    mv a0, s0
+; OLD-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    li a2, 0
-; OLD-NEXT:    li s3, 0
+; OLD-NEXT:    sd zero, 0(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    call __cxa_throw
 ; OLD-NEXT:  .Ltmp9: # EH_LABEL
 ; OLD-NEXT:  # %bb.6: # %unreachable
 ; OLD-NEXT:  .LBB1_7: # %lpad7
 ; OLD-NEXT:  .Ltmp10: # EH_LABEL
-; OLD-NEXT:    ld a2, 8(sp)
-; OLD-NEXT:    addi a1, sp, 24
-; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    ld a2, 40(sp)
+; OLD-NEXT:    addi a1, sp, 56
+; OLD-NEXT:    sd a0, 32(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    bne a2, a1, .LBB1_9
 ; OLD-NEXT:  # %bb.8: # %ehcleanup9
-; OLD-NEXT:    bnez s3, .LBB1_14
+; OLD-NEXT:    ld a0, 0(sp) # 8-byte Folded Reload
+; OLD-NEXT:    bnez a0, .LBB1_14
 ; OLD-NEXT:    j .LBB1_10
 ; OLD-NEXT:  .LBB1_9: # %if.then.i.i
-; OLD-NEXT:    ld a1, 24(sp)
+; OLD-NEXT:    ld a1, 56(sp)
 ; OLD-NEXT:    addi a1, a1, 1
 ; OLD-NEXT:    mv a0, a2
 ; OLD-NEXT:    call _ZdlPvm
-; OLD-NEXT:    bnez s3, .LBB1_14
+; OLD-NEXT:    ld a0, 0(sp) # 8-byte Folded Reload
+; OLD-NEXT:    bnez a0, .LBB1_14
 ; OLD-NEXT:  .LBB1_10: # %eh.resume
-; OLD-NEXT:    mv a0, s1
+; OLD-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    call _Unwind_Resume
 ; OLD-NEXT:  .LBB1_11: # %ehcleanup9.thread20
 ; OLD-NEXT:  .Ltmp5: # EH_LABEL
@@ -295,11 +280,11 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; OLD-NEXT:  .LBB1_12: # %ehcleanup9.thread
 ; OLD-NEXT:  .Ltmp2: # EH_LABEL
 ; OLD-NEXT:  .LBB1_13: # %cleanup.action
-; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    sd a0, 32(sp) # 8-byte Folded Spill
 ; OLD-NEXT:  .LBB1_14: # %cleanup.action
-; OLD-NEXT:    mv a0, s0
+; OLD-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    call __cxa_free_exception
-; OLD-NEXT:    mv a0, s1
+; OLD-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    call _Unwind_Resume
 ;
 ; NEW-LABEL: _ZN7cObject4dropEP12cOwnedObject:
@@ -314,74 +299,69 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; NEW-NEXT:    addi sp, sp, -80
 ; NEW-NEXT:    .cfi_def_cfa_offset 80
 ; NEW-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s0, 64(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s2, 48(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s3, 40(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset ra, -8
-; NEW-NEXT:    .cfi_offset s0, -16
-; NEW-NEXT:    .cfi_offset s1, -24
-; NEW-NEXT:    .cfi_offset s2, -32
-; NEW-NEXT:    .cfi_offset s3, -40
-; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    sd a0, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    li a0, 200
-; NEW-NEXT:    mv s2, a1
+; NEW-NEXT:    sd a1, 32(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    call __cxa_allocate_exception
-; NEW-NEXT:    ld a1, 0(s2)
+; NEW-NEXT:    ld a1, 32(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld a1, 0(a1)
 ; NEW-NEXT:    ld a1, 16(a1)
-; NEW-NEXT:    mv s0, a0
+; NEW-NEXT:    sd a0, 24(sp) # 8-byte Folded Spill
 ; NEW-NEXT:  .Ltmp0: # EH_LABEL
-; NEW-NEXT:    mv s3, s2
-; NEW-NEXT:    mv a0, s2
+; NEW-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    jalr a1
+; NEW-NEXT:    sd a0, 8(sp) # 8-byte Folded Spill
 ; NEW-NEXT:  .Ltmp1: # EH_LABEL
 ; NEW-NEXT:  # %bb.3: # %invoke.cont
-; NEW-NEXT:    mv s2, a0
-; NEW-NEXT:    mv a1, s3
-; NEW-NEXT:    ld a0, 0(s3)
+; NEW-NEXT:    ld a1, 32(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld a0, 0(a1)
 ; NEW-NEXT:    ld a2, 24(a0)
 ; NEW-NEXT:  .Ltmp3: # EH_LABEL
-; NEW-NEXT:    addi a0, sp, 8
+; NEW-NEXT:    addi a0, sp, 40
 ; NEW-NEXT:    jalr a2
 ; NEW-NEXT:  .Ltmp4: # EH_LABEL
 ; NEW-NEXT:  # %bb.4: # %invoke.cont5
-; NEW-NEXT:    ld a4, 8(sp)
-; NEW-NEXT:    li s3, 1
+; NEW-NEXT:    ld a4, 40(sp)
+; NEW-NEXT:    li a0, 1
+; NEW-NEXT:    sd a0, 0(sp) # 8-byte Folded Spill
 ; NEW-NEXT:  .Ltmp6: # EH_LABEL
 ; NEW-NEXT:    lui a2, %hi(.L.str.1)
 ; NEW-NEXT:    addi a2, a2, %lo(.L.str.1)
-; NEW-NEXT:    mv a0, s0
-; NEW-NEXT:    mv a1, s1
-; NEW-NEXT:    mv a3, s2
+; NEW-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld a1, 16(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld a3, 8(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    call _ZN13cRuntimeErrorC1EPKvPKcz
 ; NEW-NEXT:  .Ltmp7: # EH_LABEL
 ; NEW-NEXT:  # %bb.5: # %invoke.cont8
 ; NEW-NEXT:  .Ltmp8: # EH_LABEL
 ; NEW-NEXT:    lui a1, %hi(_ZTI13cRuntimeError)
 ; NEW-NEXT:    addi a1, a1, %lo(_ZTI13cRuntimeError)
-; NEW-NEXT:    mv a0, s0
+; NEW-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    li a2, 0
-; NEW-NEXT:    li s3, 0
+; NEW-NEXT:    sd zero, 0(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    call __cxa_throw
 ; NEW-NEXT:  .Ltmp9: # EH_LABEL
 ; NEW-NEXT:  # %bb.6: # %unreachable
 ; NEW-NEXT:  .LBB1_7: # %lpad7
 ; NEW-NEXT:  .Ltmp10: # EH_LABEL
-; NEW-NEXT:    ld a2, 8(sp)
-; NEW-NEXT:    addi a1, sp, 24
-; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    ld a2, 40(sp)
+; NEW-NEXT:    addi a1, sp, 56
+; NEW-NEXT:    sd a0, 32(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    bne a2, a1, .LBB1_9
 ; NEW-NEXT:  # %bb.8: # %ehcleanup9
-; NEW-NEXT:    bnez s3, .LBB1_14
+; NEW-NEXT:    ld a0, 0(sp) # 8-byte Folded Reload
+; NEW-NEXT:    bnez a0, .LBB1_14
 ; NEW-NEXT:    j .LBB1_10
 ; NEW-NEXT:  .LBB1_9: # %if.then.i.i
-; NEW-NEXT:    ld a1, 24(sp)
+; NEW-NEXT:    ld a1, 56(sp)
 ; NEW-NEXT:    addi a1, a1, 1
 ; NEW-NEXT:    mv a0, a2
 ; NEW-NEXT:    call _ZdlPvm
-; NEW-NEXT:    bnez s3, .LBB1_14
+; NEW-NEXT:    ld a0, 0(sp) # 8-byte Folded Reload
+; NEW-NEXT:    bnez a0, .LBB1_14
 ; NEW-NEXT:  .LBB1_10: # %eh.resume
-; NEW-NEXT:    mv a0, s1
+; NEW-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    call _Unwind_Resume
 ; NEW-NEXT:  .LBB1_11: # %ehcleanup9.thread20
 ; NEW-NEXT:  .Ltmp5: # EH_LABEL
@@ -389,11 +369,11 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; NEW-NEXT:  .LBB1_12: # %ehcleanup9.thread
 ; NEW-NEXT:  .Ltmp2: # EH_LABEL
 ; NEW-NEXT:  .LBB1_13: # %cleanup.action
-; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    sd a0, 32(sp) # 8-byte Folded Spill
 ; NEW-NEXT:  .LBB1_14: # %cleanup.action
-; NEW-NEXT:    mv a0, s0
+; NEW-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    call __cxa_free_exception
-; NEW-NEXT:    mv a0, s1
+; NEW-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    call _Unwind_Resume
 ;
 ; NEW-RA-LABEL: _ZN7cObject4dropEP12cOwnedObject:
@@ -408,74 +388,69 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; NEW-RA-NEXT:    addi sp, sp, -80
 ; NEW-RA-NEXT:    .cfi_def_cfa_offset 80
 ; NEW-RA-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s0, 64(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s2, 48(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s3, 40(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    .cfi_offset ra, -8
-; NEW-RA-NEXT:    .cfi_offset s0, -16
-; NEW-RA-NEXT:    .cfi_offset s1, -24
-; NEW-RA-NEXT:    .cfi_offset s2, -32
-; NEW-RA-NEXT:    .cfi_offset s3, -40
-; NEW-RA-NEXT:    mv s1, a0
+; NEW-RA-NEXT:    sd a0, 16(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    li a0, 200
-; NEW-RA-NEXT:    mv s2, a1
+; NEW-RA-NEXT:    sd a1, 32(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    call __cxa_allocate_exception
-; NEW-RA-NEXT:    ld a1, 0(s2)
+; NEW-RA-NEXT:    ld a1, 32(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a1, 0(a1)
 ; NEW-RA-NEXT:    ld a1, 16(a1)
-; NEW-RA-NEXT:    mv s0, a0
+; NEW-RA-NEXT:    sd a0, 24(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:  .Ltmp0: # EH_LABEL
-; NEW-RA-NEXT:    mv s3, s2
-; NEW-RA-NEXT:    mv a0, s2
+; NEW-RA-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    jalr a1
+; NEW-RA-NEXT:    sd a0, 8(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:  .Ltmp1: # EH_LABEL
 ; NEW-RA-NEXT:  # %bb.3: # %invoke.cont
-; NEW-RA-NEXT:    mv s2, a0
-; NEW-RA-NEXT:    mv a1, s3
-; NEW-RA-NEXT:    ld a0, 0(s3)
+; NEW-RA-NEXT:    ld a1, 32(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a0, 0(a1)
 ; NEW-RA-NEXT:    ld a2, 24(a0)
 ; NEW-RA-NEXT:  .Ltmp3: # EH_LABEL
-; NEW-RA-NEXT:    addi a0, sp, 8
+; NEW-RA-NEXT:    addi a0, sp, 40
 ; NEW-RA-NEXT:    jalr a2
 ; NEW-RA-NEXT:  .Ltmp4: # EH_LABEL
 ; NEW-RA-NEXT:  # %bb.4: # %invoke.cont5
-; NEW-RA-NEXT:    ld a4, 8(sp)
-; NEW-RA-NEXT:    li s3, 1
+; NEW-RA-NEXT:    ld a4, 40(sp)
+; NEW-RA-NEXT:    li a0, 1
+; NEW-RA-NEXT:    sd a0, 0(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:  .Ltmp6: # EH_LABEL
 ; NEW-RA-NEXT:    lui a2, %hi(.L.str.1)
 ; NEW-RA-NEXT:    addi a2, a2, %lo(.L.str.1)
-; NEW-RA-NEXT:    mv a0, s0
-; NEW-RA-NEXT:    mv a1, s1
-; NEW-RA-NEXT:    mv a3, s2
+; NEW-RA-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a1, 16(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a3, 8(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call _ZN13cRuntimeErrorC1EPKvPKcz
 ; NEW-RA-NEXT:  .Ltmp7: # EH_LABEL
 ; NEW-RA-NEXT:  # %bb.5: # %invoke.cont8
 ; NEW-RA-NEXT:  .Ltmp8: # EH_LABEL
 ; NEW-RA-NEXT:    lui a1, %hi(_ZTI13cRuntimeError)
 ; NEW-RA-NEXT:    addi a1, a1, %lo(_ZTI13cRuntimeError)
-; NEW-RA-NEXT:    mv a0, s0
+; NEW-RA-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    li a2, 0
-; NEW-RA-NEXT:    li s3, 0
+; NEW-RA-NEXT:    sd zero, 0(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    call __cxa_throw
 ; NEW-RA-NEXT:  .Ltmp9: # EH_LABEL
 ; NEW-RA-NEXT:  # %bb.6: # %unreachable
 ; NEW-RA-NEXT:  .LBB1_7: # %lpad7
 ; NEW-RA-NEXT:  .Ltmp10: # EH_LABEL
-; NEW-RA-NEXT:    ld a2, 8(sp)
-; NEW-RA-NEXT:    addi a1, sp, 24
-; NEW-RA-NEXT:    mv s1, a0
+; NEW-RA-NEXT:    ld a2, 40(sp)
+; NEW-RA-NEXT:    addi a1, sp, 56
+; NEW-RA-NEXT:    sd a0, 32(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    bne a2, a1, .LBB1_9
 ; NEW-RA-NEXT:  # %bb.8: # %ehcleanup9
-; NEW-RA-NEXT:    bnez s3, .LBB1_14
+; NEW-RA-NEXT:    ld a0, 0(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    bnez a0, .LBB1_14
 ; NEW-RA-NEXT:    j .LBB1_10
 ; NEW-RA-NEXT:  .LBB1_9: # %if.then.i.i
-; NEW-RA-NEXT:    ld a1, 24(sp)
+; NEW-RA-NEXT:    ld a1, 56(sp)
 ; NEW-RA-NEXT:    addi a1, a1, 1
 ; NEW-RA-NEXT:    mv a0, a2
 ; NEW-RA-NEXT:    call _ZdlPvm
-; NEW-RA-NEXT:    bnez s3, .LBB1_14
+; NEW-RA-NEXT:    ld a0, 0(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    bnez a0, .LBB1_14
 ; NEW-RA-NEXT:  .LBB1_10: # %eh.resume
-; NEW-RA-NEXT:    mv a0, s1
+; NEW-RA-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call _Unwind_Resume
 ; NEW-RA-NEXT:  .LBB1_11: # %ehcleanup9.thread20
 ; NEW-RA-NEXT:  .Ltmp5: # EH_LABEL
@@ -483,11 +458,11 @@ define dso_local void @_ZN7cObject4dropEP12cOwnedObject(ptr noundef nonnull alig
 ; NEW-RA-NEXT:  .LBB1_12: # %ehcleanup9.thread
 ; NEW-RA-NEXT:  .Ltmp2: # EH_LABEL
 ; NEW-RA-NEXT:  .LBB1_13: # %cleanup.action
-; NEW-RA-NEXT:    mv s1, a0
+; NEW-RA-NEXT:    sd a0, 32(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:  .LBB1_14: # %cleanup.action
-; NEW-RA-NEXT:    mv a0, s0
+; NEW-RA-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call __cxa_free_exception
-; NEW-RA-NEXT:    mv a0, s1
+; NEW-RA-NEXT:    ld a0, 32(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call _Unwind_Resume
 entry:
   %ref.tmp = alloca %"class.std::__cxx11::basic_string", align 8
@@ -1025,83 +1000,84 @@ define dso_local i64 @dot(ptr noundef %a, ptr noundef %b, i64 noundef %n) local_
 ; NEW-RA:       # %bb.0: # %entry
 ; NEW-RA-NEXT:    addi sp, sp, -80
 ; NEW-RA-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s0, 64(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    ld s0, 0(a0)
-; NEW-RA-NEXT:    li a3, 2
-; NEW-RA-NEXT:    beq a2, a3, .LBB4_3
+; NEW-RA-NEXT:    ld a3, 0(a0)
+; NEW-RA-NEXT:    li a4, 2
+; NEW-RA-NEXT:    beq a2, a4, .LBB4_3
 ; NEW-RA-NEXT:  # %bb.1: # %entry
-; NEW-RA-NEXT:    li a3, 1
-; NEW-RA-NEXT:    bne a2, a3, .LBB4_4
+; NEW-RA-NEXT:    li a4, 1
+; NEW-RA-NEXT:    bne a2, a4, .LBB4_5
 ; NEW-RA-NEXT:  # %bb.2: # %sw.bb
 ; NEW-RA-NEXT:    ld a0, 0(a1)
-; NEW-RA-NEXT:    mul a0, a0, s0
-; NEW-RA-NEXT:    call reduce
-; NEW-RA-NEXT:    addi a0, a0, 1
-; NEW-RA-NEXT:    j .LBB4_5
+; NEW-RA-NEXT:    mul a0, a0, a3
+; NEW-RA-NEXT:    j .LBB4_4
 ; NEW-RA-NEXT:  .LBB4_3: # %sw.bb2
-; NEW-RA-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    ld a2, 0(a1)
-; NEW-RA-NEXT:    mul a2, a2, s0
-; NEW-RA-NEXT:    mv s0, a0
+; NEW-RA-NEXT:    mul a2, a2, a3
+; NEW-RA-NEXT:    sd a0, 64(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    mv a0, a2
-; NEW-RA-NEXT:    mv s1, a1
+; NEW-RA-NEXT:    sd a1, 56(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    call reduce
-; NEW-RA-NEXT:    ld a1, 8(s0)
-; NEW-RA-NEXT:    ld a2, 8(s1)
-; NEW-RA-NEXT:    mul a1, a2, a1
+; NEW-RA-NEXT:    ld a1, 64(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 8(a1)
+; NEW-RA-NEXT:    ld a1, 56(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a1, 8(a1)
+; NEW-RA-NEXT:    mul a1, a1, a2
 ; NEW-RA-NEXT:    add a0, a1, a0
+; NEW-RA-NEXT:  .LBB4_4: # %return
 ; NEW-RA-NEXT:    call reduce
 ; NEW-RA-NEXT:    addi a0, a0, 1
-; NEW-RA-NEXT:    ld s1, 56(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    j .LBB4_5
-; NEW-RA-NEXT:  .LBB4_4: # %sw.default
-; NEW-RA-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s2, 48(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s3, 40(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s4, 32(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s5, 24(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s6, 16(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s7, 8(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s8, 0(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    ld s3, 8(a0)
-; NEW-RA-NEXT:    ld s4, 16(a0)
-; NEW-RA-NEXT:    ld s5, 24(a0)
-; NEW-RA-NEXT:    ld s6, 32(a0)
-; NEW-RA-NEXT:    ld s7, 40(a0)
+; NEW-RA-NEXT:    j .LBB4_6
+; NEW-RA-NEXT:  .LBB4_5: # %sw.default
+; NEW-RA-NEXT:    ld a4, 8(a0)
+; NEW-RA-NEXT:    sd a4, 64(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a4, 16(a0)
+; NEW-RA-NEXT:    sd a4, 56(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a4, 24(a0)
+; NEW-RA-NEXT:    sd a4, 48(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a4, 32(a0)
+; NEW-RA-NEXT:    sd a4, 40(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a4, 40(a0)
+; NEW-RA-NEXT:    sd a4, 32(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    sd a3, 24(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    call big
-; NEW-RA-NEXT:    mul a1, s3, s0
-; NEW-RA-NEXT:    mv s8, s0
-; NEW-RA-NEXT:    mv s0, a0
+; NEW-RA-NEXT:    ld a1, 64(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 24(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    mul a1, a1, a2
+; NEW-RA-NEXT:    sd a0, 16(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    mv a0, a1
 ; NEW-RA-NEXT:    call reduce
-; NEW-RA-NEXT:    mul a1, s5, s4
-; NEW-RA-NEXT:    mv s1, a0
+; NEW-RA-NEXT:    ld a1, 56(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 48(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    mul a1, a2, a1
+; NEW-RA-NEXT:    sd a0, 8(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    mv a0, a1
 ; NEW-RA-NEXT:    call reduce
-; NEW-RA-NEXT:    mul a1, s7, s6
-; NEW-RA-NEXT:    mv s2, a0
+; NEW-RA-NEXT:    ld a1, 40(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 32(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    mul a1, a2, a1
+; NEW-RA-NEXT:    sd a0, 0(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    mv a0, a1
 ; NEW-RA-NEXT:    call reduce
-; NEW-RA-NEXT:    add s3, s3, s8
-; NEW-RA-NEXT:    add s4, s4, s5
-; NEW-RA-NEXT:    add s6, s6, s7
-; NEW-RA-NEXT:    add s3, s3, s4
-; NEW-RA-NEXT:    add s0, s6, s0
-; NEW-RA-NEXT:    add s0, s3, s0
-; NEW-RA-NEXT:    add s0, s0, s1
-; NEW-RA-NEXT:    add a0, s2, a0
-; NEW-RA-NEXT:    add a0, s0, a0
-; NEW-RA-NEXT:    ld s1, 56(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s2, 48(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s3, 40(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s4, 32(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s5, 24(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s6, 16(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s7, 8(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s8, 0(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:  .LBB4_5: # %return
+; NEW-RA-NEXT:    ld a1, 64(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 24(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    add a3, a1, a2
+; NEW-RA-NEXT:    ld a1, 56(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 48(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    add a4, a1, a2
+; NEW-RA-NEXT:    ld a1, 40(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 32(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    add a2, a1, a2
+; NEW-RA-NEXT:    add a3, a3, a4
+; NEW-RA-NEXT:    ld a1, 16(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    add a1, a2, a1
+; NEW-RA-NEXT:    add a3, a3, a1
+; NEW-RA-NEXT:    ld a1, 8(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    add a3, a3, a1
+; NEW-RA-NEXT:    ld a1, 0(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    add a0, a1, a0
+; NEW-RA-NEXT:    add a0, a3, a0
+; NEW-RA-NEXT:  .LBB4_6: # %return
 ; NEW-RA-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s0, 64(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    addi sp, sp, 80
 ; NEW-RA-NEXT:    ret
 entry:
@@ -1342,59 +1318,58 @@ define dso_local signext range(i32 0, 2) i32 @legal(ptr noundef %p, i32 noundef 
 ;
 ; NEW-RA-LABEL: legal:
 ; NEW-RA:       # %bb.0: # %entry
-; NEW-RA-NEXT:    addi sp, sp, -80
-; NEW-RA-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s0, 64(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    addi sp, sp, -64
+; NEW-RA-NEXT:    sd ra, 56(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    lui a4, 12
 ; NEW-RA-NEXT:    slli a3, a1, 52
 ; NEW-RA-NEXT:    and a2, a1, a4
 ; NEW-RA-NEXT:    srli a3, a3, 58
 ; NEW-RA-NEXT:    andi a1, a1, 63
+; NEW-RA-NEXT:    sd a0, 48(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    beq a2, a4, .LBB5_3
 ; NEW-RA-NEXT:  # %bb.1: # %entry
 ; NEW-RA-NEXT:    lui a4, 8
 ; NEW-RA-NEXT:    bne a2, a4, .LBB5_5
 ; NEW-RA-NEXT:  # %bb.2: # %if.then
-; NEW-RA-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s2, 48(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s3, 40(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s4, 32(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s5, 24(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    sd s6, 16(sp) # 8-byte Folded Spill
-; NEW-RA-NEXT:    ld s3, 0(a0)
-; NEW-RA-NEXT:    ld s4, 8(a0)
-; NEW-RA-NEXT:    ld s5, 16(a0)
-; NEW-RA-NEXT:    ld s6, 24(a0)
-; NEW-RA-NEXT:    xor a2, s4, s3
-; NEW-RA-NEXT:    mv s0, a0
-; NEW-RA-NEXT:    mv s1, a1
+; NEW-RA-NEXT:    ld a2, 0(a0)
+; NEW-RA-NEXT:    sd a2, 40(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a2, 8(a0)
+; NEW-RA-NEXT:    sd a2, 32(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a2, 16(a0)
+; NEW-RA-NEXT:    sd a2, 24(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a2, 24(a0)
+; NEW-RA-NEXT:    sd a2, 16(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a2, 40(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a4, 32(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    xor a2, a4, a2
+; NEW-RA-NEXT:    ld a0, 48(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    sd a1, 8(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    mv a1, a3
 ; NEW-RA-NEXT:    call attackers
-; NEW-RA-NEXT:    mv s2, a0
-; NEW-RA-NEXT:    xor a2, s6, s5
-; NEW-RA-NEXT:    mv a0, s0
-; NEW-RA-NEXT:    mv a1, s1
+; NEW-RA-NEXT:    sd a0, 0(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    ld a0, 24(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 16(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    xor a2, a2, a0
+; NEW-RA-NEXT:    ld a0, 48(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a1, 8(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call attackers
-; NEW-RA-NEXT:    or a1, s4, s3
-; NEW-RA-NEXT:    or a2, s5, s6
-; NEW-RA-NEXT:    or a0, a0, s2
-; NEW-RA-NEXT:    or a1, a1, a2
-; NEW-RA-NEXT:    and a0, a0, a1
-; NEW-RA-NEXT:    seqz a0, a0
-; NEW-RA-NEXT:    ld s1, 56(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s2, 48(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s3, 40(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s4, 32(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s5, 24(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s6, 16(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    j .LBB5_8
+; NEW-RA-NEXT:    ld a1, 40(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 32(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    or a3, a2, a1
+; NEW-RA-NEXT:    ld a1, 24(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 16(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    or a2, a1, a2
+; NEW-RA-NEXT:    ld a1, 0(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    or a0, a0, a1
+; NEW-RA-NEXT:    or a2, a3, a2
+; NEW-RA-NEXT:    and a0, a0, a2
+; NEW-RA-NEXT:    j .LBB5_7
 ; NEW-RA-NEXT:  .LBB5_3: # %if.then16
-; NEW-RA-NEXT:    sd a3, 8(sp) # 8-byte Folded Spill
+; NEW-RA-NEXT:    sd a3, 40(sp) # 8-byte Folded Spill
 ; NEW-RA-NEXT:    lw a2, 64(a0)
 ; NEW-RA-NEXT:    slli a2, a2, 3
 ; NEW-RA-NEXT:    add a2, a0, a2
 ; NEW-RA-NEXT:    ld a2, 0(a2)
-; NEW-RA-NEXT:    mv s0, a0
 ; NEW-RA-NEXT:    call attackers
 ; NEW-RA-NEXT:    beqz a0, .LBB5_6
 ; NEW-RA-NEXT:  # %bb.4:
@@ -1402,25 +1377,26 @@ define dso_local signext range(i32 0, 2) i32 @legal(ptr noundef %p, i32 noundef 
 ; NEW-RA-NEXT:    j .LBB5_8
 ; NEW-RA-NEXT:  .LBB5_5: # %if.end27
 ; NEW-RA-NEXT:    ld a2, 40(a0)
-; NEW-RA-NEXT:    mv s0, a0
+; NEW-RA-NEXT:    ld a0, 48(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call attackers
-; NEW-RA-NEXT:    lw a1, 64(s0)
-; NEW-RA-NEXT:    slli a1, a1, 3
-; NEW-RA-NEXT:    add a1, s0, a1
+; NEW-RA-NEXT:    ld a1, 48(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    lw a1, 64(a1)
+; NEW-RA-NEXT:    slli a2, a1, 3
+; NEW-RA-NEXT:    ld a1, 48(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    add a1, a1, a2
 ; NEW-RA-NEXT:    ld a1, 0(a1)
 ; NEW-RA-NEXT:    and a0, a1, a0
 ; NEW-RA-NEXT:    j .LBB5_7
 ; NEW-RA-NEXT:  .LBB5_6: # %land.rhs
-; NEW-RA-NEXT:    mv a0, s0
-; NEW-RA-NEXT:    ld a2, 32(s0)
-; NEW-RA-NEXT:    ld a1, 8(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a0, 48(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    ld a2, 32(a0)
+; NEW-RA-NEXT:    ld a1, 40(sp) # 8-byte Folded Reload
 ; NEW-RA-NEXT:    call attackers
 ; NEW-RA-NEXT:  .LBB5_7: # %cleanup
 ; NEW-RA-NEXT:    seqz a0, a0
 ; NEW-RA-NEXT:  .LBB5_8: # %cleanup
-; NEW-RA-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    ld s0, 64(sp) # 8-byte Folded Reload
-; NEW-RA-NEXT:    addi sp, sp, 80
+; NEW-RA-NEXT:    ld ra, 56(sp) # 8-byte Folded Reload
+; NEW-RA-NEXT:    addi sp, sp, 64
 ; NEW-RA-NEXT:    ret
 entry:
   %shr = lshr i32 %m, 6

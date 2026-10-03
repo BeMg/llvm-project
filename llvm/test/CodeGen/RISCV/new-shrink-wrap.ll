@@ -1239,11 +1239,9 @@ define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personal
 ; OLD-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
-; OLD-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    .cfi_offset ra, -8
 ; OLD-NEXT:    .cfi_offset s0, -16
 ; OLD-NEXT:    .cfi_offset s1, -24
-; OLD-NEXT:    .cfi_offset s2, -32
 ; OLD-NEXT:    .cfi_remember_state
 ; OLD-NEXT:    mv s0, a1
 ; OLD-NEXT:    mv s1, a0
@@ -1255,11 +1253,9 @@ define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personal
 ; OLD-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
-; OLD-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
 ; OLD-NEXT:    .cfi_restore ra
 ; OLD-NEXT:    .cfi_restore s0
 ; OLD-NEXT:    .cfi_restore s1
-; OLD-NEXT:    .cfi_restore s2
 ; OLD-NEXT:    addi sp, sp, 32
 ; OLD-NEXT:    .cfi_def_cfa_offset 0
 ; OLD-NEXT:    ret
@@ -1275,14 +1271,15 @@ define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personal
 ; OLD-NEXT:  # %bb.4: # %work
 ; OLD-NEXT:    li a0, 1
 ; OLD-NEXT:    call f
-; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    sd a0, 0(sp) # 8-byte Folded Spill
 ; OLD-NEXT:    li a0, 2
 ; OLD-NEXT:    call f
-; OLD-NEXT:    mv s2, a0
+; OLD-NEXT:    mv s1, a0
 ; OLD-NEXT:    li a0, 3
 ; OLD-NEXT:    call f
-; OLD-NEXT:    add s1, s1, s2
-; OLD-NEXT:    addw s1, s1, a0
+; OLD-NEXT:    ld a1, 0(sp) # 8-byte Folded Reload
+; OLD-NEXT:    add a1, a1, s1
+; OLD-NEXT:    addw s1, a1, a0
 ; OLD-NEXT:    mv a0, s0
 ; OLD-NEXT:    call use_ptr
 ; OLD-NEXT:    j .LBB12_1
@@ -1299,11 +1296,12 @@ define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personal
 ; NEW-NEXT:    addi sp, sp, -32
 ; NEW-NEXT:    .cfi_def_cfa_offset 32
 ; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
-; NEW-NEXT:    .cfi_offset ra, -8
 ; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
-; NEW-NEXT:    .cfi_offset s0, -16
 ; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
 ; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    .cfi_remember_state
 ; NEW-NEXT:    mv s0, a1
 ; NEW-NEXT:    mv s1, a0
 ; NEW-NEXT:    call f
@@ -1312,19 +1310,16 @@ define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personal
 ; NEW-NEXT:  .LBB12_1: # %ret
 ; NEW-NEXT:    mv a0, s1
 ; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
-; NEW-NEXT:    .cfi_restore ra
 ; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
-; NEW-NEXT:    .cfi_restore s0
 ; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    .cfi_restore s0
 ; NEW-NEXT:    .cfi_restore s1
 ; NEW-NEXT:    addi sp, sp, 32
 ; NEW-NEXT:    .cfi_def_cfa_offset 0
 ; NEW-NEXT:    ret
 ; NEW-NEXT:  .LBB12_2: # %init
-; NEW-NEXT:    .cfi_def_cfa_offset 32
-; NEW-NEXT:    .cfi_offset ra, -8
-; NEW-NEXT:    .cfi_offset s0, -16
-; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    .cfi_restore_state
 ; NEW-NEXT:  .Ltmp0: # EH_LABEL
 ; NEW-NEXT:    call f
 ; NEW-NEXT:  .Ltmp1: # EH_LABEL
@@ -1333,27 +1328,22 @@ define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personal
 ; NEW-NEXT:    sext.w a0, a0
 ; NEW-NEXT:    bnez a0, .LBB12_1
 ; NEW-NEXT:  # %bb.4: # %work
-; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
-; NEW-NEXT:    .cfi_offset s2, -32
 ; NEW-NEXT:    li a0, 1
 ; NEW-NEXT:    call f
-; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    sd a0, 0(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    li a0, 2
 ; NEW-NEXT:    call f
-; NEW-NEXT:    mv s2, a0
+; NEW-NEXT:    mv s1, a0
 ; NEW-NEXT:    li a0, 3
 ; NEW-NEXT:    call f
-; NEW-NEXT:    add s1, s1, s2
-; NEW-NEXT:    addw s1, s1, a0
+; NEW-NEXT:    ld a1, 0(sp) # 8-byte Folded Reload
+; NEW-NEXT:    add a1, a1, s1
+; NEW-NEXT:    addw s1, a1, a0
 ; NEW-NEXT:    mv a0, s0
 ; NEW-NEXT:    call use_ptr
-; NEW-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
-; NEW-NEXT:    .cfi_restore s2
 ; NEW-NEXT:    j .LBB12_1
 ; NEW-NEXT:  .LBB12_5: # %lpad
 ; NEW-NEXT:  .Ltmp2: # EH_LABEL
-; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
-; NEW-NEXT:    .cfi_offset s2, -32
 ; NEW-NEXT:    mv s1, a0
 ; NEW-NEXT:    mv a0, s0
 ; NEW-NEXT:    call use_ptr

@@ -361,6 +361,13 @@ private:
                                    uint8_t &CostPerUseLimit,
                                    SmallVectorImpl<Register> &NewVRegs);
   BlockFrequency calcSpillCost(const LiveInterval &LI);
+  BlockFrequency calcRematCost(const LiveInterval &LI);
+  bool isRematerializableFromOriginal(const LiveInterval &LI) const;
+  bool crossesCallInDeeperLoop(const LiveInterval &LI) const;
+  MCRegister tryEvictRematForCSR(const LiveInterval &VirtReg,
+                                 AllocationOrder &Order,
+                                 SmallVectorImpl<Register> &NewVRegs,
+                                 BlockFrequency MaxCost);
   void initializeCSRCost();
   MCRegister tryBlockSplit(const LiveInterval &, AllocationOrder &,
                            SmallVectorImpl<Register> &);

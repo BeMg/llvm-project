@@ -884,6 +884,14 @@ public:
   /// FIXME: We should deprecate this usage.
   virtual unsigned getCSRCost() const { return 0; }
 
+  /// Return true if the greedy register allocator should compare the first
+  /// use of a callee-saved register with more choices than a pre-split:
+  /// rematerializing or spilling the live range, and rematerializing the live
+  /// ranges that occupy a register that is not callee-saved.
+  virtual bool compareCSRFirstUseWithSpill(const MachineFunction &MF) const {
+    return false;
+  }
+
   /// Scale the CSRFirstUseCost with this number.
   /// The scale is a percentage (e.g., 30 means 30% of the base cost).
   /// Target can tune and override this default value.

@@ -75,6 +75,10 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
     return 5;
   }
 
+  bool compareCSRFirstUseWithSpill(const MachineFunction &MF) const override {
+    return true;
+  }
+
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
 
   const TargetRegisterClass *
