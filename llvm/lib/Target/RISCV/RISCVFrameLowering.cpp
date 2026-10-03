@@ -2796,8 +2796,16 @@ bool RISCVFrameLowering::canShrinkWrapCSRSeparately(const MachineFunction &MF,
   // The separate saves and restores address their spill slots relative to the
   // stack pointer once the whole frame is allocated. Like GCC, only do this
   // when the offsets are small, and the frame contains no scalable objects.
-  if (hasRVVFrameObject(MF) || !isInt<12>(MFI.estimateStackSize(MF)))
+  // Look at the stack objects instead of using hasRVVFrameObject, which is
+  // true for every function when the V extension is available. This is
+  // called after register allocation, when all RVV spill slots exist.
+  if (!isInt<12>(MFI.estimateStackSize(MF)))
     return false;
+  for (int FI = MFI.getObjectIndexBegin(), E = MFI.getObjectIndexEnd(); FI < E;
+       ++FI)
+    if (!MFI.isDeadObjectIndex(FI) &&
+        MFI.getStackID(FI) == TargetStackID::ScalableVector)
+      return false;
 
   // The spill slot must be a regular one, not one managed by the libcalls or
   // push/pop.
