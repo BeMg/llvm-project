@@ -50,6 +50,12 @@
 //    which prolog/epilog insertion uses for the registers the target accepts
 //    (TargetFrameLowering::canShrinkWrapCSRSeparately).
 //
+//    If the target allows several save and restore points
+//    (TargetFrameLowering::enableMultipleSaveRestorePoints), the frame itself
+//    is one more component. This goes further than GCC: the prologue and the
+//    epilogue can be placed in several regions inside the one of part 1, as
+//    long as every path runs at most one prologue.
+//
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/NewShrinkWrap.h"
@@ -103,6 +109,9 @@ STATISTIC(NumSeparateFunc,
           "Number of functions with separately shrink-wrapped registers");
 STATISTIC(NumSeparateRegs,
           "Number of callee-saved registers shrink-wrapped separately");
+STATISTIC(NumMultiplePrologues,
+          "Number of functions with the prologue placed in the separate "
+          "shrink-wrapping");
 
 static cl::opt<bool>
     EnableNewShrinkWrap("enable-new-shrink-wrap", cl::Hidden, cl::init(false),
@@ -113,6 +122,11 @@ static cl::opt<bool> EnableSeparateShrinkWrap(
     "new-shrink-wrap-separate", cl::Hidden, cl::init(true),
     cl::desc("Shrink-wrap callee-saved registers separately in the "
              "NewShrinkWrap pass"));
+
+static cl::opt<bool> EnableMultiplePrologues(
+    "new-shrink-wrap-multiple-prologues", cl::Hidden, cl::init(true),
+    cl::desc("Let the NewShrinkWrap pass place the prologue/epilogue in several "
+             "regions, when the target allows it"));
 
 static cl::opt<unsigned> MaxDuplicateSize(
     "new-shrink-wrap-max-dup-size", cl::Hidden, cl::init(8),
@@ -1388,6 +1402,19 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
     if (getCurrentCSRs().count(*CSR) &&
         TFI->canShrinkWrapCSRSeparately(*MF, *CSR))
       Components.push_back(*CSR);
+
+  // The frame itself is one more component when the target allows several
+  // prologues: the allocation of the stack frame, with the saves of the
+  // callee-saved registers that are not shrink-wrapped separately. It is
+  // needed by the blocks that need the frame, and by every block that has
+  // another component. If it is not present in Save, the prologue and the
+  // epilogue are placed like the other components, possibly in several
+  // regions, with several restore points.
+  unsigned FrameC = ~0u;
+  if (EnableMultiplePrologues && TFI->enableMultipleSaveRestorePoints(*MF)) {
+    FrameC = Components.size();
+    Components.push_back(MCRegister());
+  }
   if (Components.empty())
     return false;
   unsigned NumComponents = Components.size();
@@ -1448,10 +1475,35 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
 
   // The components each block needs: those live-in, used or defined in it
   // (GCC's components_for_bb).
+  // The frame component is used by instructions that use a frame index or a
+  // callee-saved register.
+  auto UsesFrame = [&](const MachineInstr &MI) {
+    return any_of(MI.operands(), [&](const MachineOperand &MO) {
+      return MO.isFI() ||
+             (MO.isReg() && MO.getReg() && (MO.isDef() || MO.readsReg()) &&
+              any_of(getCurrentCSRs(), [&](MCRegister CSR) {
+                return TRI->regsOverlap(MO.getReg(), CSR);
+              }));
+    });
+  };
+  BitVector NeedsFrame(NumBlocks);
+  if (FrameC != ~0u) {
+    collectFrameBlocks();
+    for (MachineBasicBlock *MBB : FrameBlocks)
+      NeedsFrame.set(MBB->getNumber());
+    for (MachineBasicBlock *MBB : StackUseBlocks)
+      NeedsFrame.set(MBB->getNumber());
+  }
+
   std::vector<BitVector> Needs(NumBlocks, BitVector(NumComponents));
   for (MachineBasicBlock *MBB : RegionBlocks) {
     BitVector &N = Needs[MBB->getNumber()];
     for (unsigned C = 0; C != NumComponents; ++C) {
+      if (C == FrameC) {
+        if (NeedsFrame.test(MBB->getNumber()))
+          N.set(C);
+        continue;
+      }
       MCRegister Reg = Components[C];
       if (any_of(MBB->liveins(),
                  [&](const MachineBasicBlock::RegisterMaskPair &LI) {
@@ -1494,7 +1546,7 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
     MachineDomTreeNode::iterator NextChild;
     uint64_t TotalCost;
   };
-  for (unsigned C = 0; C != NumComponents; ++C) {
+  auto PlaceComponent = [&](unsigned C) {
     MachineDomTreeNode *SaveNode = MDT->getNode(Save);
     SmallVector<Frame, 16> Stack({{SaveNode, SaveNode->begin(), 0}});
     while (true) {
@@ -1532,7 +1584,10 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
       ParentTotal = ParentTotal + Total < ParentTotal ? UINT64_MAX
                                                       : ParentTotal + Total;
     }
-  }
+  };
+  for (unsigned C = 0; C != NumComponents; ++C)
+    if (C != FrameC)
+      PlaceComponent(C);
 
   // Extend the components to every block where they are already present on
   // all paths from the region entry, or on all paths to the region exit
@@ -1541,6 +1596,7 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   BitVector AllComponents(NumComponents, true);
   std::vector<BitVector> Head(NumBlocks, BitVector(NumComponents));
   std::vector<BitVector> Tail(NumBlocks, BitVector(NumComponents));
+  auto SpreadComponents = [&]() {
   bool Changed;
   do {
     // Head: the components missing on some path from the region entry.
@@ -1616,12 +1672,32 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
       }
     }
   } while (Changed);
+  };
+  SpreadComponents();
+
+  // Place the frame where the blocks need it, and around the other
+  // components.
+  if (FrameC != ~0u) {
+    for (MachineBasicBlock *MBB : RegionBlocks)
+      if (Has[MBB->getNumber()].any())
+        Needs[MBB->getNumber()].set(FrameC);
+    PlaceComponent(FrameC);
+    SpreadComponents();
+  }
+  auto ComponentName = [&](unsigned C) {
+    std::string Name = "frame";
+    if (C != FrameC) {
+      Name.clear();
+      raw_string_ostream(Name) << printReg(Components[C], TRI);
+    }
+    return Name;
+  };
 
   LLVM_DEBUG({
     for (MachineBasicBlock *MBB : RegionBlocks) {
       dbgs() << printMBBReference(*MBB) << " has";
       for (unsigned C : Has[MBB->getNumber()].set_bits())
-        dbgs() << ' ' << printReg(Components[C], TRI);
+        dbgs() << ' ' << ComponentName(C);
       dbgs() << '\n';
     }
   });
@@ -1637,7 +1713,7 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   // split edges.
   auto TerminatorsUse = [&](MachineBasicBlock *MBB, unsigned C) {
     return any_of(MBB->terminators(), [&](const MachineInstr &MI) {
-      return UsesComponent(MI, Components[C]);
+      return C == FrameC ? UsesFrame(MI) : UsesComponent(MI, Components[C]);
     });
   };
   auto ComputeHeadTail = [&](std::vector<BitVector> &ProHead,
@@ -1709,15 +1785,82 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
       }
     }
   }
+  if (FrameC != ~0u && Active.test(FrameC)) {
+    // Run at most one prologue on every path, so that the frame is never set
+    // up more often than with the prologue in Save, whatever the actual
+    // frequencies are. The block frequencies are estimates, and they do not
+    // show which paths go through two regions, or through a region in a loop
+    // more than once. Find the blocks after a region on some path, and check
+    // that no region starts after them.
+    BitVector AfterFrame(NumBlocks);
+    bool Changed;
+    do {
+      Changed = false;
+      for (MachineBasicBlock *MBB : RegionBlocks) {
+        if (AfterFrame.test(MBB->getNumber()))
+          continue;
+        if (Has[MBB->getNumber()].test(FrameC) ||
+            any_of(MBB->predecessors(), [&](MachineBasicBlock *Pred) {
+              return IsInRegion(Pred) && AfterFrame.test(Pred->getNumber());
+            })) {
+          AfterFrame.set(MBB->getNumber());
+          Changed = true;
+        }
+      }
+    } while (Changed);
+    for (MachineBasicBlock *MBB : RegionBlocks)
+      if (Has[MBB->getNumber()].test(FrameC) &&
+          any_of(MBB->predecessors(), [&](MachineBasicBlock *Pred) {
+            return IsInRegion(Pred) &&
+                   !Has[Pred->getNumber()].test(FrameC) &&
+                   AfterFrame.test(Pred->getNumber());
+          })) {
+        LLVM_DEBUG(dbgs() << "A path runs two prologues, at "
+                          << printMBBReference(*MBB) << '\n');
+        Active.reset(FrameC);
+        break;
+      }
+  }
+  if (FrameC != ~0u && Active.test(FrameC)) {
+    // The target must accept the prologue and epilogue blocks. A prologue
+    // cannot go at the start of a landing pad, before its label.
+    for (MachineBasicBlock *MBB : RegionBlocks)
+      if ((ProHead[MBB->getNumber()].test(FrameC) &&
+           (MBB->isEHPad() || !TFI->canUseAsPrologue(*MBB))) ||
+          (EpiTail[MBB->getNumber()].test(FrameC) &&
+           !TFI->canUseAsEpilogue(*MBB))) {
+        LLVM_DEBUG(dbgs() << "Cannot place the frame in "
+                          << printMBBReference(*MBB) << '\n');
+        Active.reset(FrameC);
+        break;
+      }
+  }
+  if (FrameC != ~0u && Active.test(FrameC)) {
+    // The components placed like the frame are saved by its prologues.
+    for (unsigned C : Active.set_bits())
+      if (C != FrameC && all_of(RegionBlocks, [&](MachineBasicBlock *MBB) {
+            const BitVector &H = Has[MBB->getNumber()];
+            return H.test(C) == H.test(FrameC);
+          }))
+        Active.reset(C);
+  }
   if (Active.none())
     return false;
   ComputeHeadTail(ProHead, EpiTail);
 
-  SaveRestorePoints CSRSaves, CSRRestores;
+  // The points of the frame component are the save and restore points of
+  // the prologue/epilogue.
+  SaveRestorePoints CSRSaves, CSRRestores, FrameSaves, FrameRestores;
   auto AddPoints = [&](SaveRestorePoints &Points, MachineBasicBlock *MBB,
                        const BitVector &Comps) {
-    for (unsigned C : Comps.set_bits())
-      Points[MBB].push_back(CalleeSavedInfo(Components[C]));
+    for (unsigned C : Comps.set_bits()) {
+      if (C != FrameC)
+        Points[MBB].push_back(CalleeSavedInfo(Components[C]));
+      else if (&Points == &CSRSaves)
+        FrameSaves[MBB];
+      else
+        FrameRestores[MBB];
+    }
   };
   struct EdgeSplit {
     MachineBasicBlock *From, *To;
@@ -1758,13 +1901,20 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   LLVM_DEBUG({
     dbgs() << "Separately shrink-wrapped:";
     for (unsigned C : Active.set_bits())
-      dbgs() << ' ' << printReg(Components[C], TRI);
+      dbgs() << ' ' << ComponentName(C);
     dbgs() << '\n';
   });
   MachineFrameInfo &MutableMFI = MF->getFrameInfo();
   MutableMFI.setCSRSavePoints(std::move(CSRSaves));
   MutableMFI.setCSRRestorePoints(std::move(CSRRestores));
-  ++NumSeparateFunc;
+  if (FrameC != ~0u && Active.test(FrameC)) {
+    MutableMFI.setSavePoints(std::move(FrameSaves));
+    MutableMFI.setRestorePoints(std::move(FrameRestores));
+    Active.reset(FrameC);
+    ++NumMultiplePrologues;
+  }
+  if (Active.any())
+    ++NumSeparateFunc;
   NumSeparateRegs += Active.count();
   return !EdgeSplits.empty();
 }

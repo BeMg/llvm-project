@@ -212,6 +212,14 @@ public:
     return false;
   }
 
+  /// Returns true if shrink-wrapping may place the prologue and epilogue in
+  /// several regions of \p MF, with several save and restore points. Each
+  /// prologue allocates the whole frame and saves the callee-saved registers
+  /// that are not shrink-wrapped separately, and the regions do not overlap.
+  virtual bool enableMultipleSaveRestorePoints(const MachineFunction &MF) const {
+    return false;
+  }
+
   /// Emit the CFI describing the separate save (\p IsSave) or restore of the
   /// callee-saved registers \p CSI, inserted before \p MBBI. This is called
   /// after the frame layout is final, for blocks that save or restore

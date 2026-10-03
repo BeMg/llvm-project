@@ -32,9 +32,14 @@
 
 # sink_csr_def_no_gain: the same, but the other successor of bb.1, bb.6, needs
 # the frame too. Moving the copy would not move the prologue down, so bb.1 is
-# unchanged.
+# unchanged. The prologue is placed in the separate shrink-wrapping instead,
+# before bb.1, with an epilogue in each of bb.4 and bb.6.
 # POINTS-LABEL: name: sink_csr_def_no_gain
-# POINTS-NOT:   savePoint:
+# POINTS:       savePoint:
+# POINTS-NEXT:    - point: '%bb.1'
+# POINTS:       restorePoint:
+# POINTS-NEXT:    - point: '%bb.4'
+# POINTS:         - point: '%bb.6'
 # POINTS:       csrSavePoints:
 
 # noreturn_paths: bb.2 needs the frame and leads to two blocks calling

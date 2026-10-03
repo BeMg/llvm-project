@@ -1516,4 +1516,218 @@ ret:
   ret void
 }
 
+; Two cold paths need the frame, and their only common dominator is the entry,
+; which the hot path also runs. Each cold path gets its own prologue and
+; epilogue, so the hot path runs without the frame.
+define i32 @multiple_prologues(i32 %x, i32 %y) {
+; OLD-LABEL: multiple_prologues:
+; OLD:       # %bb.0: # %entry
+; OLD-NEXT:    addi sp, sp, -16
+; OLD-NEXT:    .cfi_def_cfa_offset 16
+; OLD-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s0, 0(sp) # 8-byte Folded Spill
+; OLD-NEXT:    .cfi_offset ra, -8
+; OLD-NEXT:    .cfi_offset s0, -16
+; OLD-NEXT:    .cfi_remember_state
+; OLD-NEXT:    li a3, 1
+; OLD-NEXT:    sext.w a2, a0
+; OLD-NEXT:    beq a2, a3, .LBB14_3
+; OLD-NEXT:  # %bb.1: # %entry
+; OLD-NEXT:    mv a0, a1
+; OLD-NEXT:    beqz a2, .LBB14_4
+; OLD-NEXT:  .LBB14_2: # %ret
+; OLD-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s0, 0(sp) # 8-byte Folded Reload
+; OLD-NEXT:    .cfi_restore ra
+; OLD-NEXT:    .cfi_restore s0
+; OLD-NEXT:    addi sp, sp, 16
+; OLD-NEXT:    .cfi_def_cfa_offset 0
+; OLD-NEXT:    ret
+; OLD-NEXT:  .LBB14_3: # %b
+; OLD-NEXT:    .cfi_restore_state
+; OLD-NEXT:    call g
+; OLD-NEXT:    li a0, 7
+; OLD-NEXT:    j .LBB14_2
+; OLD-NEXT:  .LBB14_4: # %a
+; OLD-NEXT:    mv s0, a0
+; OLD-NEXT:    call f
+; OLD-NEXT:    li a2, 11
+; OLD-NEXT:    sext.w a3, a0
+; OLD-NEXT:    addw a0, a0, s0
+; OLD-NEXT:    blt a3, a2, .LBB14_2
+; OLD-NEXT:  # %bb.5: # %a.ret
+; OLD-NEXT:    call f
+; OLD-NEXT:    j .LBB14_2
+;
+; NEW-LABEL: multiple_prologues:
+; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    li a3, 1
+; NEW-NEXT:    sext.w a2, a0
+; NEW-NEXT:    beq a2, a3, .LBB14_3
+; NEW-NEXT:  # %bb.1: # %entry
+; NEW-NEXT:    mv a0, a1
+; NEW-NEXT:    beqz a2, .LBB14_4
+; NEW-NEXT:  # %bb.2: # %ret
+; NEW-NEXT:    ret
+; NEW-NEXT:  .LBB14_3: # %b
+; NEW-NEXT:    addi sp, sp, -16
+; NEW-NEXT:    .cfi_def_cfa_offset 16
+; NEW-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    call g
+; NEW-NEXT:    li a0, 7
+; NEW-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    addi sp, sp, 16
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:    ret
+; NEW-NEXT:  .LBB14_4: # %a
+; NEW-NEXT:    addi sp, sp, -16
+; NEW-NEXT:    .cfi_def_cfa_offset 16
+; NEW-NEXT:    sd ra, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    sd s0, 0(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    mv s0, a0
+; NEW-NEXT:    call f
+; NEW-NEXT:    li a2, 11
+; NEW-NEXT:    sext.w a3, a0
+; NEW-NEXT:    addw a0, a0, s0
+; NEW-NEXT:    blt a3, a2, .LBB14_6
+; NEW-NEXT:  # %bb.5: # %a.ret
+; NEW-NEXT:    call f
+; NEW-NEXT:  .LBB14_6:
+; NEW-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    ld s0, 0(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    addi sp, sp, 16
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:    ret
+entry:
+  switch i32 %x, label %ret [
+    i32 0, label %a
+    i32 1, label %b
+  ], !prof !1
+a:
+  %a1 = call i32 @f(i32 %y)
+  %a2 = add i32 %a1, %y
+  %ca = icmp sgt i32 %a1, 10
+  br i1 %ca, label %a.ret, label %ret
+a.ret:
+  %a3 = call i32 @f(i32 %a2)
+  ret i32 %a3
+b:
+  call void @g()
+  br label %ret
+ret:
+  %r = phi i32 [ %y, %entry ], [ %a2, %a ], [ 7, %b ]
+  ret i32 %r
+}
+
+; The cold path needs the frame and ends in two return blocks, so no single
+; restore point exists for a prologue in %cold. Each return block gets an
+; epilogue (tail merging joins them), and the hot path runs without the frame.
+define i32 @several_restore_points(i32 %x, i32 %y) {
+; OLD-LABEL: several_restore_points:
+; OLD:       # %bb.0: # %entry
+; OLD-NEXT:    addi sp, sp, -32
+; OLD-NEXT:    .cfi_def_cfa_offset 32
+; OLD-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; OLD-NEXT:    .cfi_offset ra, -8
+; OLD-NEXT:    .cfi_offset s0, -16
+; OLD-NEXT:    .cfi_offset s1, -24
+; OLD-NEXT:    .cfi_remember_state
+; OLD-NEXT:    sext.w a2, a0
+; OLD-NEXT:    beqz a2, .LBB15_3
+; OLD-NEXT:  # %bb.1: # %hot
+; OLD-NEXT:    addiw a0, a1, 1
+; OLD-NEXT:  .LBB15_2: # %hot
+; OLD-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; OLD-NEXT:    .cfi_restore ra
+; OLD-NEXT:    .cfi_restore s0
+; OLD-NEXT:    .cfi_restore s1
+; OLD-NEXT:    addi sp, sp, 32
+; OLD-NEXT:    .cfi_def_cfa_offset 0
+; OLD-NEXT:    ret
+; OLD-NEXT:  .LBB15_3: # %cold
+; OLD-NEXT:    .cfi_restore_state
+; OLD-NEXT:    mv s0, a0
+; OLD-NEXT:    mv a0, a1
+; OLD-NEXT:    mv s1, a1
+; OLD-NEXT:    call f
+; OLD-NEXT:    li a1, 11
+; OLD-NEXT:    sext.w a2, a0
+; OLD-NEXT:    addw a0, a0, s1
+; OLD-NEXT:    blt a2, a1, .LBB15_5
+; OLD-NEXT:  # %bb.4: # %r1
+; OLD-NEXT:    call f
+; OLD-NEXT:    j .LBB15_2
+; OLD-NEXT:  .LBB15_5: # %r2
+; OLD-NEXT:    subw a0, a0, s0
+; OLD-NEXT:    j .LBB15_2
+;
+; NEW-LABEL: several_restore_points:
+; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    sext.w a2, a0
+; NEW-NEXT:    beqz a2, .LBB15_2
+; NEW-NEXT:  # %bb.1: # %hot
+; NEW-NEXT:    addiw a0, a1, 1
+; NEW-NEXT:    ret
+; NEW-NEXT:  .LBB15_2: # %cold
+; NEW-NEXT:    addi sp, sp, -32
+; NEW-NEXT:    .cfi_def_cfa_offset 32
+; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    mv s0, a0
+; NEW-NEXT:    mv a0, a1
+; NEW-NEXT:    mv s1, a1
+; NEW-NEXT:    call f
+; NEW-NEXT:    li a1, 11
+; NEW-NEXT:    sext.w a2, a0
+; NEW-NEXT:    addw a0, a0, s1
+; NEW-NEXT:    blt a2, a1, .LBB15_4
+; NEW-NEXT:  # %bb.3: # %r1
+; NEW-NEXT:    call f
+; NEW-NEXT:    j .LBB15_5
+; NEW-NEXT:  .LBB15_4: # %r2
+; NEW-NEXT:    subw a0, a0, s0
+; NEW-NEXT:  .LBB15_5: # %r2
+; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    addi sp, sp, 32
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:    ret
+entry:
+  %c = icmp eq i32 %x, 0
+  br i1 %c, label %cold, label %hot, !prof !0
+hot:
+  %r0 = add i32 %y, 1
+  ret i32 %r0
+cold:
+  %a = call i32 @f(i32 %y)
+  %s = add i32 %a, %y
+  %c2 = icmp sgt i32 %a, 10
+  br i1 %c2, label %r1, label %r2
+r1:
+  %m = call i32 @f(i32 %s)
+  ret i32 %m
+r2:
+  %d = sub i32 %s, %x
+  ret i32 %d
+}
+
 !0 = !{!"branch_weights", i32 1, i32 1000}
+!1 = !{!"branch_weights", i32 1000, i32 1, i32 1}

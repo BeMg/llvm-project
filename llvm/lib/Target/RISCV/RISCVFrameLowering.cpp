@@ -2803,6 +2803,15 @@ bool RISCVFrameLowering::enableSeparateCSRShrinkWrapping(
          !RVFI->isPushable(MF) && !RVFI->useSaveRestoreLibCalls(MF);
 }
 
+static bool hasScalableStackObject(const MachineFrameInfo &MFI) {
+  for (int FI = MFI.getObjectIndexBegin(), E = MFI.getObjectIndexEnd(); FI < E;
+       ++FI)
+    if (!MFI.isDeadObjectIndex(FI) &&
+        MFI.getStackID(FI) == TargetStackID::ScalableVector)
+      return true;
+  return false;
+}
+
 bool RISCVFrameLowering::canShrinkWrapCSRSeparately(const MachineFunction &MF,
                                                     MCRegister Reg) const {
   if (!enableSeparateCSRShrinkWrapping(MF))
@@ -2831,13 +2840,8 @@ bool RISCVFrameLowering::canShrinkWrapCSRSeparately(const MachineFunction &MF,
   // Look at the stack objects instead of using hasRVVFrameObject, which is
   // true for every function when the V extension is available. This is
   // called after register allocation, when all RVV spill slots exist.
-  if (!isInt<12>(MFI.estimateStackSize(MF)))
+  if (!isInt<12>(MFI.estimateStackSize(MF)) || hasScalableStackObject(MFI))
     return false;
-  for (int FI = MFI.getObjectIndexBegin(), E = MFI.getObjectIndexEnd(); FI < E;
-       ++FI)
-    if (!MFI.isDeadObjectIndex(FI) &&
-        MFI.getStackID(FI) == TargetStackID::ScalableVector)
-      return false;
 
   // The spill slot must be a regular one, not one managed by the libcalls or
   // push/pop.
@@ -2871,6 +2875,20 @@ void RISCVFrameLowering::emitSeparateCSRCFI(MachineBasicBlock &MBB,
     else
       CFIBuilder.buildRestore(CS.getReg());
   }
+}
+
+bool RISCVFrameLowering::enableMultipleSaveRestorePoints(
+    const MachineFunction &MF) const {
+  // Only for the small frames that separate shrink-wrapping handles, where
+  // each prologue is a single adjustment of the stack pointer followed by the
+  // saves. Every prologue must set up the same frame, so leave out the frame
+  // and base pointers, stack probes and the shadow call stack.
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  return enableSeparateCSRShrinkWrapping(MF) && !hasFP(MF) && !hasBP(MF) &&
+         !MFI.hasVarSizedObjects() && isInt<12>(MFI.estimateStackSize(MF)) &&
+         !hasScalableStackObject(MFI) &&
+         !STI.getTargetLowering()->hasInlineStackProbe(MF) &&
+         !MF.getFunction().hasFnAttribute(Attribute::ShadowCallStack);
 }
 
 bool RISCVFrameLowering::enableCFIFixup(const MachineFunction &MF) const {

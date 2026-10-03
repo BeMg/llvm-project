@@ -431,21 +431,26 @@ void PEIImpl::calculateSaveRestoreBlocks(MachineFunction &MF) {
   // prologue and epilogue of the function.
   // So set the save points for those.
 
-  // Use the points found by shrink-wrapping, if any.
+  // Use the points found by shrink-wrapping, if any. Several save and restore
+  // points are only used when the target allows them
+  // (TargetFrameLowering::enableMultipleSaveRestorePoints). Sort them to keep
+  // the output deterministic.
   if (!MFI.getSavePoints().empty()) {
-    assert(MFI.getSavePoints().size() == 1 &&
-           "Multiple save points are not yet supported!");
-    const auto &SavePoint = *MFI.getSavePoints().begin();
-    SaveBlocks.push_back(SavePoint.first);
-    assert(MFI.getRestorePoints().size() == 1 &&
-           "Multiple restore points are not yet supported!");
-    const auto &RestorePoint = *MFI.getRestorePoints().begin();
-    MachineBasicBlock *RestoreBlock = RestorePoint.first;
-    // If RestoreBlock does not have any successor and is not a return block
-    // then the end point is unreachable and we do not need to insert any
-    // epilogue.
-    if (!RestoreBlock->succ_empty() || RestoreBlock->isReturnBlock())
-      RestoreBlocks.push_back(RestoreBlock);
+    auto ByNumber = [](const MachineBasicBlock *A, const MachineBasicBlock *B) {
+      return A->getNumber() < B->getNumber();
+    };
+    for (const auto &SavePoint : MFI.getSavePoints())
+      SaveBlocks.push_back(SavePoint.first);
+    llvm::sort(SaveBlocks, ByNumber);
+    for (const auto &RestorePoint : MFI.getRestorePoints()) {
+      MachineBasicBlock *RestoreBlock = RestorePoint.first;
+      // If RestoreBlock does not have any successor and is not a return block
+      // then the end point is unreachable and we do not need to insert any
+      // epilogue.
+      if (!RestoreBlock->succ_empty() || RestoreBlock->isReturnBlock())
+        RestoreBlocks.push_back(RestoreBlock);
+    }
+    llvm::sort(RestoreBlocks, ByNumber);
     return;
   }
 
@@ -885,7 +890,10 @@ void PEIImpl::spillCalleeSavedRegs(MachineFunction &MF) {
         insertCSRSaves(*SaveBlock, SaveBlock->begin(), CSI);
 
       // Update the live-in information of all the blocks up to the save point.
-      updateLiveness(MF);
+      if (MFI.getSavePoints().size() > 1 || MFI.getRestorePoints().size() > 1)
+        updateLivenessSeparate(MF, SaveBlocks, RestoreBlocks);
+      else
+        updateLiveness(MF);
 
       for (MachineBasicBlock *RestoreBlock : RestoreBlocks)
         insertCSRRestores(*RestoreBlock, CSI);

@@ -79,6 +79,7 @@ public:
                           ArrayRef<CalleeSavedInfo> CSI,
                           bool IsSave) const override;
 
+  bool enableMultipleSaveRestorePoints(const MachineFunction &MF) const override;
   bool enableCFIFixup(const MachineFunction &MF) const override;
   bool enableCFIInstrInserter(const MachineFunction &MF) const override;
 
