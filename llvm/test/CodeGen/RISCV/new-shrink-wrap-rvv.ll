@@ -14,8 +14,8 @@ define i32 @separate(i32 %x, i32 %y) {
 ; CHECK-NEXT:    addi sp, sp, -32
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset ra, -8
+; CHECK-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    .cfi_offset s0, -16
 ; CHECK-NEXT:    sext.w a2, a0
 ; CHECK-NEXT:    mv s0, a1
@@ -44,8 +44,8 @@ define i32 @separate(i32 %x, i32 %y) {
 ; CHECK-NEXT:    call f
 ; CHECK-NEXT:  .LBB0_3: # %ret
 ; CHECK-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore ra
+; CHECK-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    .cfi_restore s0
 ; CHECK-NEXT:    addi sp, sp, 32
 ; CHECK-NEXT:    .cfi_def_cfa_offset 0

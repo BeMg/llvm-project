@@ -580,6 +580,23 @@ uint64_t RISCVFrameLowering::getStackSizeWithRVVPadding(
   return alignTo(MFI.getStackSize() + RVFI->getRVVPadding(), getStackAlign());
 }
 
+/// Return the position right after the last save (\p IsSave) or restore of
+/// \p CS before \p End in \p MBB, or \p End if there is none.
+static MachineBasicBlock::iterator
+findCSRSaveOrRestore(MachineBasicBlock &MBB, MachineBasicBlock::iterator End,
+                     const CalleeSavedInfo &CS, bool IsSave) {
+  const TargetInstrInfo &TII = *MBB.getParent()->getSubtarget().getInstrInfo();
+  for (MachineBasicBlock::iterator I = End; I != MBB.begin();) {
+    --I;
+    int FI;
+    Register Reg =
+        IsSave ? TII.isStoreToStackSlot(*I, FI) : TII.isLoadFromStackSlot(*I, FI);
+    if (Reg == CS.getReg() && FI == CS.getFrameIdx())
+      return std::next(I);
+  }
+  return End;
+}
+
 static SmallVector<CalleeSavedInfo, 8>
 getUnmanagedCSI(const MachineFunction &MF,
                 const std::vector<CalleeSavedInfo> &CSI,
@@ -1191,7 +1208,14 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
         CFIBuilder.buildOffset(EvenReg, Offset);
         CFIBuilder.buildOffset(OddReg, Offset + 4);
       } else {
+        // The prologues of a function with separately shrink-wrapped
+        // registers save different registers. Keep the CFI with its save,
+        // see emitSeparateCSRCFI.
+        if (MFI.isShrinkWrappedSeparately())
+          CFIBuilder.setInsertPoint(
+              findCSRSaveOrRestore(MBB, MBBI, CS, /*IsSave=*/true));
         CFIBuilder.buildOffset(Reg, Offset);
+        CFIBuilder.setInsertPoint(MBBI);
       }
     }
   }
@@ -1462,7 +1486,15 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
         CFIBuilder.buildRestore(EvenReg);
         CFIBuilder.buildRestore(OddReg);
       } else {
+        // The epilogues of a function with separately shrink-wrapped
+        // registers restore different registers, and tail merging does not
+        // compare CFI instructions. Keep the CFI with its restore, see
+        // emitSeparateCSRCFI.
+        if (MFI.isShrinkWrappedSeparately())
+          CFIBuilder.setInsertPoint(
+              findCSRSaveOrRestore(MBB, MBBI, CS, /*IsSave=*/false));
         CFIBuilder.buildRestore(Reg);
+        CFIBuilder.setInsertPoint(MBBI);
       }
     }
   }
@@ -2829,20 +2861,8 @@ void RISCVFrameLowering::emitSeparateCSRCFI(MachineBasicBlock &MBB,
   // it describes. The saves are at the start of MBB, before MBBI, and the
   // restores right before MBBI.
   const MachineFrameInfo &MFI = MF.getFrameInfo();
-  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-  auto FindSaveOrRestore = [&](const CalleeSavedInfo &CS) {
-    for (MachineBasicBlock::iterator I = MBBI; I != MBB.begin();) {
-      --I;
-      int FI;
-      Register Reg = IsSave ? TII.isStoreToStackSlot(*I, FI)
-                            : TII.isLoadFromStackSlot(*I, FI);
-      if (Reg == CS.getReg() && FI == CS.getFrameIdx())
-        return std::next(I);
-    }
-    return MBBI;
-  };
   for (const CalleeSavedInfo &CS : CSI) {
-    CFIInstBuilder CFIBuilder(MBB, FindSaveOrRestore(CS),
+    CFIInstBuilder CFIBuilder(MBB, findCSRSaveOrRestore(MBB, MBBI, CS, IsSave),
                               IsSave ? MachineInstr::FrameSetup
                                      : MachineInstr::FrameDestroy);
     if (IsSave)

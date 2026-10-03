@@ -171,8 +171,8 @@ define i32 @separate(i32 %x, i32 %y) {
 ; NEW-NEXT:    addi sp, sp, -32
 ; NEW-NEXT:    .cfi_def_cfa_offset 32
 ; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s0, -16
 ; NEW-NEXT:    sext.w a2, a0
 ; NEW-NEXT:    mv s0, a1
@@ -201,8 +201,8 @@ define i32 @separate(i32 %x, i32 %y) {
 ; NEW-NEXT:    call f
 ; NEW-NEXT:  .LBB2_3: # %ret
 ; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s0
 ; NEW-NEXT:    addi sp, sp, 32
 ; NEW-NEXT:    .cfi_def_cfa_offset 0
@@ -298,12 +298,12 @@ define i32 @separate_loop(i32 %n, i32 %x) {
 ; NEW-NEXT:  # %bb.3: # %exit
 ; NEW-NEXT:    mv a0, s0
 ; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s2
 ; NEW-NEXT:    addi sp, sp, 32
 ; NEW-NEXT:    .cfi_def_cfa_offset 0
@@ -385,8 +385,8 @@ define i32 @separate_noreturn(i32 %x, i32 %y) {
 ; NEW-NEXT:    addi sp, sp, -32
 ; NEW-NEXT:    .cfi_def_cfa_offset 32
 ; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s0, -16
 ; NEW-NEXT:    sext.w a2, a0
 ; NEW-NEXT:    mv s0, a1
@@ -410,8 +410,8 @@ define i32 @separate_noreturn(i32 %x, i32 %y) {
 ; NEW-NEXT:    beqz a1, .LBB4_4
 ; NEW-NEXT:  .LBB4_3: # %ret
 ; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s0
 ; NEW-NEXT:    addi sp, sp, 32
 ; NEW-NEXT:    .cfi_def_cfa_offset 0
@@ -496,8 +496,8 @@ define i32 @separate_split_edge(i32 %x, i32 %y) {
 ; NEW-NEXT:    call f
 ; NEW-NEXT:    addw a0, a0, s0
 ; NEW-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s0, 0(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    ld s0, 0(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s0
 ; NEW-NEXT:    addi sp, sp, 16
 ; NEW-NEXT:    .cfi_def_cfa_offset 0
@@ -578,8 +578,8 @@ define double @separate_fpr(i32 %x, double %y) "target-features"="+d" {
 ; NEW-NEXT:    call fd
 ; NEW-NEXT:    fadd.d fa0, fa0, fs0
 ; NEW-NEXT:    ld ra, 8(sp) # 8-byte Folded Reload
-; NEW-NEXT:    fld fs0, 0(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    fld fs0, 0(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore fs0
 ; NEW-NEXT:    addi sp, sp, 16
 ; NEW-NEXT:    .cfi_def_cfa_offset 0
@@ -1121,8 +1121,8 @@ define i32 @separate_jump_table(i32 %n, i32 %x, i32 %y) {
 ; NEW-NEXT:    addi sp, sp, -32
 ; NEW-NEXT:    .cfi_def_cfa_offset 32
 ; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s0, -16
 ; NEW-NEXT:    mv s0, a2
 ; NEW-NEXT:    sext.w a0, a0
@@ -1181,8 +1181,8 @@ define i32 @separate_jump_table(i32 %n, i32 %x, i32 %y) {
 ; NEW-NEXT:    .cfi_restore s2
 ; NEW-NEXT:  .LBB11_9: # %ret
 ; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s0
 ; NEW-NEXT:    addi sp, sp, 32
 ; NEW-NEXT:    .cfi_def_cfa_offset 0
@@ -1299,10 +1299,10 @@ define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personal
 ; NEW-NEXT:    addi sp, sp, -32
 ; NEW-NEXT:    .cfi_def_cfa_offset 32
 ; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
-; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
 ; NEW-NEXT:    .cfi_offset s1, -24
 ; NEW-NEXT:    mv s0, a1
 ; NEW-NEXT:    mv s1, a0
@@ -1312,10 +1312,10 @@ define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personal
 ; NEW-NEXT:  .LBB12_1: # %ret
 ; NEW-NEXT:    mv a0, s1
 ; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
-; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
 ; NEW-NEXT:    .cfi_restore s1
 ; NEW-NEXT:    addi sp, sp, 32
 ; NEW-NEXT:    .cfi_def_cfa_offset 0
