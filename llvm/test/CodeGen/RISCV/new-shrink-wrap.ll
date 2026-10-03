@@ -693,3 +693,212 @@ ret:
   %p = phi i32 [%r1, %a], [%s2, %b]
   ret i32 %p
 }
+
+; The frame is needed on a path that returns and on a path that calls a
+; no-return function. The blocks needing the frame have no common
+; post-dominator, but the epilogue only goes on the path that returns: the
+; early exit runs without the frame.
+define void @mixed_exits(ptr %p, ptr %out, i64 %n) {
+; OLD-LABEL: mixed_exits:
+; OLD:       # %bb.0: # %entry
+; OLD-NEXT:    addi sp, sp, -32
+; OLD-NEXT:    .cfi_def_cfa_offset 32
+; OLD-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; OLD-NEXT:    .cfi_offset ra, -8
+; OLD-NEXT:    .cfi_offset s0, -16
+; OLD-NEXT:    .cfi_offset s1, -24
+; OLD-NEXT:    .cfi_remember_state
+; OLD-NEXT:    lbu a0, 0(a0)
+; OLD-NEXT:    beqz a0, .LBB8_4
+; OLD-NEXT:  # %bb.1: # %work
+; OLD-NEXT:    mv s0, a2
+; OLD-NEXT:    mv s1, a1
+; OLD-NEXT:    li a0, 56
+; OLD-NEXT:    call f
+; OLD-NEXT:    sw a0, 0(s1)
+; OLD-NEXT:    bnez s0, .LBB8_4
+; OLD-NEXT:  # %bb.2: # %check
+; OLD-NEXT:    li a0, 101
+; OLD-NEXT:    bgeu s0, a0, .LBB8_5
+; OLD-NEXT:  # %bb.3: # %grow
+; OLD-NEXT:    call g
+; OLD-NEXT:  .LBB8_4: # %ret
+; OLD-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; OLD-NEXT:    .cfi_restore ra
+; OLD-NEXT:    .cfi_restore s0
+; OLD-NEXT:    .cfi_restore s1
+; OLD-NEXT:    addi sp, sp, 32
+; OLD-NEXT:    .cfi_def_cfa_offset 0
+; OLD-NEXT:    ret
+; OLD-NEXT:  .LBB8_5: # %fail
+; OLD-NEXT:    .cfi_restore_state
+; OLD-NEXT:    call abort
+;
+; NEW-LABEL: mixed_exits:
+; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    lbu a0, 0(a0)
+; NEW-NEXT:    beqz a0, .LBB8_5
+; NEW-NEXT:  # %bb.1: # %work
+; NEW-NEXT:    addi sp, sp, -32
+; NEW-NEXT:    .cfi_def_cfa_offset 32
+; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    .cfi_remember_state
+; NEW-NEXT:    mv s0, a2
+; NEW-NEXT:    mv s1, a1
+; NEW-NEXT:    li a0, 56
+; NEW-NEXT:    call f
+; NEW-NEXT:    sw a0, 0(s1)
+; NEW-NEXT:    bnez s0, .LBB8_4
+; NEW-NEXT:  # %bb.2: # %check
+; NEW-NEXT:    li a0, 101
+; NEW-NEXT:    bgeu s0, a0, .LBB8_6
+; NEW-NEXT:  # %bb.3: # %grow
+; NEW-NEXT:    call g
+; NEW-NEXT:  .LBB8_4: # %ret
+; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    addi sp, sp, 32
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:  .LBB8_5: # %ret
+; NEW-NEXT:    ret
+; NEW-NEXT:  .LBB8_6: # %fail
+; NEW-NEXT:    .cfi_restore_state
+; NEW-NEXT:    call abort
+entry:
+  %flag = load i8, ptr %p
+  %c = icmp eq i8 %flag, 0
+  br i1 %c, label %ret, label %work
+work:
+  %r = call i32 @f(i32 56)
+  store i32 %r, ptr %out
+  %full = icmp eq i64 %n, 0
+  br i1 %full, label %check, label %ret
+check:
+  %big = icmp ugt i64 %n, 100
+  br i1 %big, label %fail, label %grow
+fail:
+  call void @abort()
+  unreachable
+grow:
+  call void @g()
+  br label %ret
+ret:
+  ret void
+}
+
+; Like mixed_exits, but the no-return path needing the frame starts after the
+; join of the paths that return. The epilogue cannot go in the join block,
+; which the no-return path is reached from; it goes in the return block.
+define void @mixed_exits_after_join(ptr %p, i32 %x, i32 %y) {
+; OLD-LABEL: mixed_exits_after_join:
+; OLD:       # %bb.0: # %entry
+; OLD-NEXT:    addi sp, sp, -32
+; OLD-NEXT:    .cfi_def_cfa_offset 32
+; OLD-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; OLD-NEXT:    .cfi_offset ra, -8
+; OLD-NEXT:    .cfi_offset s0, -16
+; OLD-NEXT:    .cfi_offset s1, -24
+; OLD-NEXT:    .cfi_remember_state
+; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    lbu a0, 0(a0)
+; OLD-NEXT:    beqz a0, .LBB9_4
+; OLD-NEXT:  # %bb.1: # %work
+; OLD-NEXT:    mv s0, a2
+; OLD-NEXT:    mv a0, a1
+; OLD-NEXT:    call f
+; OLD-NEXT:    sext.w a1, a0
+; OLD-NEXT:    beqz a1, .LBB9_3
+; OLD-NEXT:  # %bb.2: # %other
+; OLD-NEXT:    sw a0, 0(s1)
+; OLD-NEXT:  .LBB9_3: # %join
+; OLD-NEXT:    sext.w s0, s0
+; OLD-NEXT:    beqz s0, .LBB9_5
+; OLD-NEXT:  .LBB9_4: # %ret
+; OLD-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; OLD-NEXT:    .cfi_restore ra
+; OLD-NEXT:    .cfi_restore s0
+; OLD-NEXT:    .cfi_restore s1
+; OLD-NEXT:    addi sp, sp, 32
+; OLD-NEXT:    .cfi_def_cfa_offset 0
+; OLD-NEXT:    ret
+; OLD-NEXT:  .LBB9_5: # %fail
+; OLD-NEXT:    .cfi_restore_state
+; OLD-NEXT:    call abort
+;
+; NEW-LABEL: mixed_exits_after_join:
+; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    mv a3, a0
+; NEW-NEXT:    lbu a0, 0(a0)
+; NEW-NEXT:    beqz a0, .LBB9_5
+; NEW-NEXT:  # %bb.1: # %work
+; NEW-NEXT:    addi sp, sp, -32
+; NEW-NEXT:    .cfi_def_cfa_offset 32
+; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    .cfi_remember_state
+; NEW-NEXT:    mv s1, a3
+; NEW-NEXT:    mv s0, a2
+; NEW-NEXT:    mv a0, a1
+; NEW-NEXT:    call f
+; NEW-NEXT:    sext.w a1, a0
+; NEW-NEXT:    beqz a1, .LBB9_3
+; NEW-NEXT:  # %bb.2: # %other
+; NEW-NEXT:    sw a0, 0(s1)
+; NEW-NEXT:  .LBB9_3: # %join
+; NEW-NEXT:    sext.w s0, s0
+; NEW-NEXT:    beqz s0, .LBB9_6
+; NEW-NEXT:  # %bb.4: # %ret
+; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    addi sp, sp, 32
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:  .LBB9_5: # %ret
+; NEW-NEXT:    ret
+; NEW-NEXT:  .LBB9_6: # %fail
+; NEW-NEXT:    .cfi_restore_state
+; NEW-NEXT:    call abort
+entry:
+  %flag = load i8, ptr %p
+  %c = icmp eq i8 %flag, 0
+  br i1 %c, label %ret, label %work
+work:
+  %r = call i32 @f(i32 %x)
+  %c1 = icmp eq i32 %r, 0
+  br i1 %c1, label %join, label %other
+other:
+  store i32 %r, ptr %p
+  br label %join
+join:
+  %c2 = icmp eq i32 %y, 0
+  br i1 %c2, label %fail, label %ret
+fail:
+  call void @abort()
+  unreachable
+ret:
+  ret void
+}

@@ -778,26 +778,136 @@ static MachineBasicBlock *findNoReturnRestorePoint(MachineBasicBlock *Pro) {
   return Restore;
 }
 
+/// Return the common post-dominators of \p Pro and the blocks needing the
+/// frame on the paths from Pro that reach a return, nearest first. The blocks
+/// from which no return is reachable, such as calls that throw, are ignored:
+/// they keep the frame until the function is left, and need no epilogue.
+/// Return an empty list if there is none, or if the function is too large.
+static SmallVector<MachineBasicBlock *, 4>
+findReturnPathsPostDominators(MachineBasicBlock *Pro,
+                              ArrayRef<MachineBasicBlock *> FrameBlocks) {
+  SmallVector<MachineBasicBlock *, 4> Result;
+
+  // The blocks reachable from Pro, in reverse post-order.
+  ReversePostOrderTraversal<MachineBasicBlock *> RPOT(Pro);
+  SmallVector<MachineBasicBlock *, 32> Blocks(RPOT.begin(), RPOT.end());
+  DenseMap<MachineBasicBlock *, unsigned> Index;
+  for (MachineBasicBlock *MBB : Blocks)
+    Index[MBB] = Index.size();
+
+  // The blocks from which a return is reachable.
+  BitVector CanReturn(Blocks.size());
+  SmallVector<MachineBasicBlock *, 16> WorkList;
+  for (MachineBasicBlock *MBB : Blocks)
+    if (MBB->isReturnBlock()) {
+      CanReturn.set(Index[MBB]);
+      WorkList.push_back(MBB);
+    }
+  while (!WorkList.empty())
+    for (MachineBasicBlock *Pred : WorkList.pop_back_val()->predecessors()) {
+      auto It = Index.find(Pred);
+      if (It != Index.end() && !CanReturn.test(It->second)) {
+        CanReturn.set(It->second);
+        WorkList.push_back(Pred);
+      }
+    }
+  if (!CanReturn.test(Index[Pro]))
+    return Result;
+
+  // Compute the post-dominator sets on the paths to the returns, iterating in
+  // post-order until nothing changes. This is quadratic in the number of
+  // blocks, so limit it.
+  if (Blocks.size() > 1024)
+    return Result;
+  std::vector<BitVector> PDoms(Blocks.size(), BitVector(Blocks.size(), true));
+  bool Changed = true;
+  while (Changed) {
+    Changed = false;
+    for (unsigned I = Blocks.size(); I-- > 0;) {
+      if (!CanReturn.test(I))
+        continue;
+      MachineBasicBlock *MBB = Blocks[I];
+      BitVector New(Blocks.size(), !MBB->isReturnBlock());
+      if (!MBB->isReturnBlock())
+        for (MachineBasicBlock *Succ : MBB->successors())
+          if (unsigned S = Index.lookup(Succ); CanReturn.test(S))
+            New &= PDoms[S];
+      New.set(I);
+      if (New != PDoms[I]) {
+        PDoms[I] = std::move(New);
+        Changed = true;
+      }
+    }
+  }
+
+  BitVector Common = PDoms[Index[Pro]];
+  for (MachineBasicBlock *MBB : FrameBlocks)
+    if (auto It = Index.find(MBB);
+        It != Index.end() && CanReturn.test(It->second))
+      Common &= PDoms[It->second];
+
+  // A block post-dominates the blocks after it, so the nearest common
+  // post-dominator has the most post-dominators.
+  for (unsigned I : Common.set_bits())
+    Result.push_back(Blocks[I]);
+  llvm::sort(Result, [&](MachineBasicBlock *A, MachineBasicBlock *B) {
+    return PDoms[Index[A]].count() > PDoms[Index[B]].count();
+  });
+  return Result;
+}
+
 /// Find the block at the end of which the epilogue goes, for the prologue
 /// placed before \p Pro: the nearest common post-dominator of Pro and all
 /// blocks needing the frame, which is not in a loop (the prologue is not
 /// either), and whose terminators do not need the frame. If there is no such
-/// block because Pro never reaches a return, see findNoReturnRestorePoint.
+/// block because Pro never reaches a return, see findNoReturnRestorePoint. If
+/// there is none because Pro also reaches blocks that do not return, see
+/// findReturnPathsPostDominators.
 MachineBasicBlock *NewShrinkWrapImpl::findRestorePoint(MachineBasicBlock *Pro) {
+  auto CanRestore = [&](MachineBasicBlock *MBB) {
+    bool TerminatorNeedsFrame =
+        any_of(MBB->terminators(), [&](const MachineInstr &Term) {
+          return useOrDefCSROrFI(Term, /*StackAddressUsed=*/true);
+        });
+    return !TerminatorNeedsFrame && !MLI->getLoopFor(MBB) &&
+           TFI->canUseAsEpilogue(*MBB);
+  };
+
   MachineBasicBlock *Restore = Pro;
   for (MachineBasicBlock *MBB : FrameBlocks) {
     Restore = MPDT->findNearestCommonDominator(Restore, MBB);
     if (!Restore)
-      return findNoReturnRestorePoint(Pro);
+      break;
+  }
+
+  if (!Restore) {
+    if (MachineBasicBlock *NoReturn = findNoReturnRestorePoint(Pro))
+      return NoReturn;
+    // The blocks after the restore point run without the frame, so none of
+    // them may need it. Like GCC, which emits no epilogue on the paths that
+    // do not return, the other blocks needing the frame keep it.
+    for (MachineBasicBlock *MBB :
+         findReturnPathsPostDominators(Pro, FrameBlocks)) {
+      if (!CanRestore(MBB))
+        continue;
+      SmallPtrSet<MachineBasicBlock *, 16> After;
+      SmallVector<MachineBasicBlock *, 16> WorkList(MBB->successors());
+      while (!WorkList.empty()) {
+        MachineBasicBlock *Succ = WorkList.pop_back_val();
+        if (After.insert(Succ).second)
+          append_range(WorkList, Succ->successors());
+      }
+      if (any_of(FrameBlocks, [&](MachineBasicBlock *FrameMBB) {
+            return After.count(FrameMBB);
+          }))
+        continue;
+      return MBB;
+    }
+    return nullptr;
   }
 
   while (Restore) {
-    bool TerminatorNeedsFrame =
-        any_of(Restore->terminators(), [&](const MachineInstr &Term) {
-          return useOrDefCSROrFI(Term, /*StackAddressUsed=*/true);
-        });
-    if (!TerminatorNeedsFrame && !MLI->getLoopFor(Restore) &&
-        TFI->canUseAsEpilogue(*Restore))
+    if (CanRestore(Restore))
       return Restore;
     Restore = getImmediatePostDominator(*MPDT, Restore);
   }
@@ -1073,16 +1183,31 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
     return false;
   unsigned NumComponents = Components.size();
 
-  // The region between the prologue and the epilogue.
+  // The region between the prologue and the epilogue: the blocks reachable
+  // from Save without passing through Restore. This includes the paths from
+  // Save that do not return and do not pass through Restore.
   unsigned NumBlocks = MF->getNumBlockIDs();
   BitVector InRegion(NumBlocks);
   SmallVector<MachineBasicBlock *, 16> RegionBlocks;
+  SmallVector<MachineBasicBlock *, 16> WorkList({Save});
+  InRegion.set(Save->getNumber());
+  while (!WorkList.empty()) {
+    MachineBasicBlock *MBB = WorkList.pop_back_val();
+    if (!MDT->dominates(Save, MBB))
+      return false;
+    if (MBB == Restore)
+      continue;
+    for (MachineBasicBlock *Succ : MBB->successors())
+      if (!InRegion.test(Succ->getNumber())) {
+        InRegion.set(Succ->getNumber());
+        WorkList.push_back(Succ);
+      }
+  }
+  if (Restore && !InRegion.test(Restore->getNumber()))
+    return false;
   for (MachineBasicBlock &MBB : *MF)
-    if (MDT->isReachableFromEntry(&MBB) && MDT->dominates(Save, &MBB) &&
-        (!Restore || MPDT->dominates(Restore, &MBB))) {
-      InRegion.set(MBB.getNumber());
+    if (InRegion.test(MBB.getNumber()))
       RegionBlocks.push_back(&MBB);
-    }
   auto IsInRegion = [&](const MachineBasicBlock *MBB) {
     return InRegion.test(MBB->getNumber());
   };
@@ -1483,9 +1608,9 @@ bool NewShrinkWrapImpl::run(MachineFunction &Fn) {
   }
 
   if (Restore) {
-    assert(MDT->dominates(Save, Restore) &&
-           (MPDT->dominates(Restore, Save) || isNoReturnExit(*Restore)) &&
-           "Invalid save/restore points");
+    // Restore does not post-dominate Save if the paths from Save that do not
+    // return avoid it, see findRestorePoint.
+    assert(MDT->dominates(Save, Restore) && "Invalid save/restore points");
     LLVM_DEBUG(dbgs() << "Shrink-wrapped: save point "
                       << printMBBReference(*Save) << ", restore point "
                       << printMBBReference(*Restore) << '\n');
