@@ -61,6 +61,7 @@
 #include "llvm/CodeGen/NewShrinkWrap.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
@@ -428,12 +429,9 @@ NewShrinkWrapImpl::getRestoreBlocks(MachineBasicBlock *Pro) {
                                               FrameBlocks.end());
   if (StackUseBlocks.empty())
     return Blocks;
-  SmallPtrSet<MachineBasicBlock *, 32> Reachable({Pro});
-  SmallVector<MachineBasicBlock *, 16> WorkList({Pro});
-  while (!WorkList.empty())
-    for (MachineBasicBlock *Succ : WorkList.pop_back_val()->successors())
-      if (Reachable.insert(Succ).second)
-        WorkList.push_back(Succ);
+  df_iterator_default_set<MachineBasicBlock *, 32> Reachable;
+  for (MachineBasicBlock *MBB : depth_first_ext(Pro, Reachable))
+    (void)MBB;
   for (MachineBasicBlock *MBB : StackUseBlocks)
     if (Reachable.count(MBB))
       Blocks.push_back(MBB);
@@ -650,16 +648,6 @@ bool NewShrinkWrapImpl::forwardReturnCopies() {
   return Changed;
 }
 
-/// Return the nearest common dominator of \p Blocks, which is not empty.
-static MachineBasicBlock *
-findNearestCommonDominator(MachineDominatorTree &DT,
-                           ArrayRef<MachineBasicBlock *> Blocks) {
-  MachineBasicBlock *Dom = Blocks.front();
-  for (MachineBasicBlock *MBB : Blocks)
-    Dom = DT.findNearestCommonDominator(Dom, MBB);
-  return Dom;
-}
-
 /// After sinkCSRDefs renamed a callee-saved register defined in \p Pro to
 /// \p Scratch (\p Ops are its operands), try to move its def to the successors
 /// if it is a copy, instead of adding a copy there. Then no instruction is
@@ -787,7 +775,8 @@ moveCopyDef(MachineBasicBlock &Pro, MCRegister Scratch,
 bool NewShrinkWrapImpl::sinkCSRDefs() {
   if (FrameBlocks.empty())
     return false;
-  MachineBasicBlock *Pro = findNearestCommonDominator(*MDT, FrameBlocks);
+  MachineBasicBlock *Pro =
+      MDT->findNearestCommonDominator(iterator_range(FrameBlocks));
   if (!is_contained(FrameBlocks, Pro) || Pro->isEHPad() ||
       Pro->isInlineAsmBrIndirectTarget())
     return false;
@@ -852,7 +841,8 @@ bool NewShrinkWrapImpl::sinkCSRDefs() {
       NewFrameBlocks.push_back(MBB);
   if (NewFrameBlocks.empty())
     return false;
-  MachineBasicBlock *NewPro = findNearestCommonDominator(*MDT, NewFrameBlocks);
+  MachineBasicBlock *NewPro =
+      MDT->findNearestCommonDominator(iterator_range(NewFrameBlocks));
   if (NewPro == Pro || MPDT->dominates(NewPro, Pro))
     return false;
 
@@ -968,12 +958,6 @@ getImmediatePostDominator(MachinePostDominatorTree &PDT,
                           MachineBasicBlock *MBB) {
   MachineDomTreeNode *IDom = PDT.getNode(MBB)->getIDom();
   return IDom ? IDom->getBlock() : nullptr;
-}
-
-/// Return true if \p MBB ends the function without returning, so that it
-/// needs no epilogue.
-static bool isNoReturnExit(const MachineBasicBlock &MBB) {
-  return MBB.succ_empty() && !MBB.isReturnBlock();
 }
 
 /// If no return block is reachable from \p Pro, return a block without
@@ -1111,13 +1095,10 @@ MachineBasicBlock *NewShrinkWrapImpl::findRestorePoint(MachineBasicBlock *Pro) {
          findReturnPathsPostDominators(Pro, RestoreBlocks)) {
       if (!CanRestore(MBB))
         continue;
-      SmallPtrSet<MachineBasicBlock *, 16> After;
-      SmallVector<MachineBasicBlock *, 16> WorkList(MBB->successors());
-      while (!WorkList.empty()) {
-        MachineBasicBlock *Succ = WorkList.pop_back_val();
-        if (After.insert(Succ).second)
-          append_range(WorkList, Succ->successors());
-      }
+      df_iterator_default_set<MachineBasicBlock *, 16> After;
+      for (MachineBasicBlock *Succ : MBB->successors())
+        for (MachineBasicBlock *B : depth_first_ext(Succ, After))
+          (void)B;
       if (any_of(RestoreBlocks, [&](MachineBasicBlock *FrameMBB) {
             return After.count(FrameMBB);
           }))
@@ -1239,7 +1220,8 @@ bool NewShrinkWrapImpl::findPrologueRegion(PrologueRegion &Region) {
     return false;
 
   // The tightest placement dominates all blocks needing the frame.
-  MachineBasicBlock *Pro = findNearestCommonDominator(*MDT, FrameBlocks);
+  MachineBasicBlock *Pro =
+      MDT->findNearestCommonDominator(iterator_range(FrameBlocks));
   LLVM_DEBUG(dbgs() << "After wrapping required blocks, PRO is "
                     << printMBBReference(*Pro) << '\n');
 
@@ -1474,36 +1456,21 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   };
 
   // The components each block needs: those live-in, used or defined in it
-  // (GCC's components_for_bb).
-  // The frame component is used by instructions that use a frame index or a
-  // callee-saved register.
-  auto UsesFrame = [&](const MachineInstr &MI) {
-    return any_of(MI.operands(), [&](const MachineOperand &MO) {
-      return MO.isFI() ||
-             (MO.isReg() && MO.getReg() && (MO.isDef() || MO.readsReg()) &&
-              any_of(getCurrentCSRs(), [&](MCRegister CSR) {
-                return TRI->regsOverlap(MO.getReg(), CSR);
-              }));
-    });
-  };
-  BitVector NeedsFrame(NumBlocks);
+  // (GCC's components_for_bb). The frame component is needed by the blocks
+  // that need the frame.
+  std::vector<BitVector> Needs(NumBlocks, BitVector(NumComponents));
   if (FrameC != ~0u) {
     collectFrameBlocks();
-    for (MachineBasicBlock *MBB : FrameBlocks)
-      NeedsFrame.set(MBB->getNumber());
-    for (MachineBasicBlock *MBB : StackUseBlocks)
-      NeedsFrame.set(MBB->getNumber());
+    for (MachineBasicBlock *MBB :
+         concat<MachineBasicBlock *>(FrameBlocks, StackUseBlocks))
+      if (IsInRegion(MBB))
+        Needs[MBB->getNumber()].set(FrameC);
   }
-
-  std::vector<BitVector> Needs(NumBlocks, BitVector(NumComponents));
   for (MachineBasicBlock *MBB : RegionBlocks) {
     BitVector &N = Needs[MBB->getNumber()];
     for (unsigned C = 0; C != NumComponents; ++C) {
-      if (C == FrameC) {
-        if (NeedsFrame.test(MBB->getNumber()))
-          N.set(C);
+      if (C == FrameC)
         continue;
-      }
       MCRegister Reg = Components[C];
       if (any_of(MBB->liveins(),
                  [&](const MachineBasicBlock::RegisterMaskPair &LI) {
@@ -1597,81 +1564,81 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   std::vector<BitVector> Head(NumBlocks, BitVector(NumComponents));
   std::vector<BitVector> Tail(NumBlocks, BitVector(NumComponents));
   auto SpreadComponents = [&]() {
-  bool Changed;
-  do {
-    // Head: the components missing on some path from the region entry.
-    for (MachineBasicBlock *MBB : RegionBlocks)
-      Head[MBB->getNumber()].reset();
-    SmallSetVector<MachineBasicBlock *, 16> WorkList;
-    WorkList.insert(Save);
-    while (!WorkList.empty()) {
-      MachineBasicBlock *MBB = WorkList.pop_back_val();
-      BitVector &H = Head[MBB->getNumber()];
-      BitVector Old = H;
-      if (MBB == Save)
-        H |= AllComponents;
-      for (MachineBasicBlock *Pred : MBB->predecessors())
-        if (IsInRegion(Pred))
-          H |= Head[Pred->getNumber()];
-      H.reset(Has[MBB->getNumber()]);
-      if (H != Old || MBB == Save)
-        for (MachineBasicBlock *Succ : MBB->successors())
-          if (IsInRegion(Succ))
-            WorkList.insert(Succ);
-    }
-
-    // Tail: the components missing on some path to the region exit. Blocks
-    // that cannot reach the exit only consider the paths from the entry.
-    for (MachineBasicBlock *MBB : RegionBlocks)
-      Tail[MBB->getNumber()] = AllComponents;
-    SmallVector<MachineBasicBlock *, 16> Exits;
-    for (MachineBasicBlock *MBB : RegionBlocks)
-      if (IsRegionExit(MBB))
-        Exits.push_back(MBB);
-    {
-      SmallPtrSet<MachineBasicBlock *, 16> ReachesExit;
-      SmallVector<MachineBasicBlock *, 16> Stack(Exits);
-      while (!Stack.empty()) {
-        MachineBasicBlock *MBB = Stack.pop_back_val();
-        if (!ReachesExit.insert(MBB).second)
-          continue;
-        Tail[MBB->getNumber()].reset();
+    bool Changed;
+    do {
+      // Head: the components missing on some path from the region entry.
+      for (MachineBasicBlock *MBB : RegionBlocks)
+        Head[MBB->getNumber()].reset();
+      SmallSetVector<MachineBasicBlock *, 16> WorkList;
+      WorkList.insert(Save);
+      while (!WorkList.empty()) {
+        MachineBasicBlock *MBB = WorkList.pop_back_val();
+        BitVector &H = Head[MBB->getNumber()];
+        BitVector Old = H;
+        if (MBB == Save)
+          H |= AllComponents;
         for (MachineBasicBlock *Pred : MBB->predecessors())
           if (IsInRegion(Pred))
-            Stack.push_back(Pred);
+            H |= Head[Pred->getNumber()];
+        H.reset(Has[MBB->getNumber()]);
+        if (H != Old || MBB == Save)
+          for (MachineBasicBlock *Succ : MBB->successors())
+            if (IsInRegion(Succ))
+              WorkList.insert(Succ);
       }
-    }
-    for (MachineBasicBlock *MBB : Exits)
-      WorkList.insert(MBB);
-    while (!WorkList.empty()) {
-      MachineBasicBlock *MBB = WorkList.pop_back_val();
-      BitVector &T = Tail[MBB->getNumber()];
-      BitVector Old = T;
-      if (IsRegionExit(MBB))
-        T |= AllComponents;
-      else
-        for (MachineBasicBlock *Succ : MBB->successors())
-          T |= Tail[Succ->getNumber()];
-      T.reset(Has[MBB->getNumber()]);
-      if (T != Old || IsRegionExit(MBB))
-        for (MachineBasicBlock *Pred : MBB->predecessors())
-          if (IsInRegion(Pred))
-            WorkList.insert(Pred);
-    }
 
-    // A block has a component unless it is missing both on some path from
-    // the entry and on some path to the exit.
-    Changed = false;
-    for (MachineBasicBlock *MBB : RegionBlocks) {
-      BitVector NewHas = Head[MBB->getNumber()];
-      NewHas &= Tail[MBB->getNumber()];
-      NewHas.flip();
-      if (NewHas != Has[MBB->getNumber()]) {
-        Has[MBB->getNumber()] = NewHas;
-        Changed = true;
+      // Tail: the components missing on some path to the region exit. Blocks
+      // that cannot reach the exit only consider the paths from the entry.
+      for (MachineBasicBlock *MBB : RegionBlocks)
+        Tail[MBB->getNumber()] = AllComponents;
+      SmallVector<MachineBasicBlock *, 16> Exits;
+      for (MachineBasicBlock *MBB : RegionBlocks)
+        if (IsRegionExit(MBB))
+          Exits.push_back(MBB);
+      {
+        SmallPtrSet<MachineBasicBlock *, 16> ReachesExit;
+        SmallVector<MachineBasicBlock *, 16> Stack(Exits);
+        while (!Stack.empty()) {
+          MachineBasicBlock *MBB = Stack.pop_back_val();
+          if (!ReachesExit.insert(MBB).second)
+            continue;
+          Tail[MBB->getNumber()].reset();
+          for (MachineBasicBlock *Pred : MBB->predecessors())
+            if (IsInRegion(Pred))
+              Stack.push_back(Pred);
+        }
       }
-    }
-  } while (Changed);
+      for (MachineBasicBlock *MBB : Exits)
+        WorkList.insert(MBB);
+      while (!WorkList.empty()) {
+        MachineBasicBlock *MBB = WorkList.pop_back_val();
+        BitVector &T = Tail[MBB->getNumber()];
+        BitVector Old = T;
+        if (IsRegionExit(MBB))
+          T |= AllComponents;
+        else
+          for (MachineBasicBlock *Succ : MBB->successors())
+            T |= Tail[Succ->getNumber()];
+        T.reset(Has[MBB->getNumber()]);
+        if (T != Old || IsRegionExit(MBB))
+          for (MachineBasicBlock *Pred : MBB->predecessors())
+            if (IsInRegion(Pred))
+              WorkList.insert(Pred);
+      }
+
+      // A block has a component unless it is missing both on some path from
+      // the entry and on some path to the exit.
+      Changed = false;
+      for (MachineBasicBlock *MBB : RegionBlocks) {
+        BitVector NewHas = Head[MBB->getNumber()];
+        NewHas &= Tail[MBB->getNumber()];
+        NewHas.flip();
+        if (NewHas != Has[MBB->getNumber()]) {
+          Has[MBB->getNumber()] = NewHas;
+          Changed = true;
+        }
+      }
+    } while (Changed);
   };
   SpreadComponents();
 
@@ -1685,12 +1652,8 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
     SpreadComponents();
   }
   auto ComponentName = [&](unsigned C) {
-    std::string Name = "frame";
-    if (C != FrameC) {
-      Name.clear();
-      raw_string_ostream(Name) << printReg(Components[C], TRI);
-    }
-    return Name;
+    return C == FrameC ? Printable([](raw_ostream &OS) { OS << "frame"; })
+                       : printReg(Components[C], TRI);
   };
 
   LLVM_DEBUG({
@@ -1713,7 +1676,8 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   // split edges.
   auto TerminatorsUse = [&](MachineBasicBlock *MBB, unsigned C) {
     return any_of(MBB->terminators(), [&](const MachineInstr &MI) {
-      return C == FrameC ? UsesFrame(MI) : UsesComponent(MI, Components[C]);
+      return C == FrameC ? useOrDefCSROrFI(MI, /*StackAddressUsed=*/true)
+                         : UsesComponent(MI, Components[C]);
     });
   };
   auto ComputeHeadTail = [&](std::vector<BitVector> &ProHead,
@@ -1793,21 +1757,17 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
     // more than once. Find the blocks after a region on some path, and check
     // that no region starts after them.
     BitVector AfterFrame(NumBlocks);
-    bool Changed;
-    do {
-      Changed = false;
-      for (MachineBasicBlock *MBB : RegionBlocks) {
-        if (AfterFrame.test(MBB->getNumber()))
-          continue;
-        if (Has[MBB->getNumber()].test(FrameC) ||
-            any_of(MBB->predecessors(), [&](MachineBasicBlock *Pred) {
-              return IsInRegion(Pred) && AfterFrame.test(Pred->getNumber());
-            })) {
-          AfterFrame.set(MBB->getNumber());
-          Changed = true;
-        }
+    for (MachineBasicBlock *MBB : RegionBlocks)
+      if (Has[MBB->getNumber()].test(FrameC)) {
+        AfterFrame.set(MBB->getNumber());
+        WorkList.push_back(MBB);
       }
-    } while (Changed);
+    while (!WorkList.empty())
+      for (MachineBasicBlock *Succ : WorkList.pop_back_val()->successors())
+        if (IsInRegion(Succ) && !AfterFrame.test(Succ->getNumber())) {
+          AfterFrame.set(Succ->getNumber());
+          WorkList.push_back(Succ);
+        }
     for (MachineBasicBlock *MBB : RegionBlocks)
       if (Has[MBB->getNumber()].test(FrameC) &&
           any_of(MBB->predecessors(), [&](MachineBasicBlock *Pred) {
@@ -1851,15 +1811,14 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   // The points of the frame component are the save and restore points of
   // the prologue/epilogue.
   SaveRestorePoints CSRSaves, CSRRestores, FrameSaves, FrameRestores;
-  auto AddPoints = [&](SaveRestorePoints &Points, MachineBasicBlock *MBB,
+  auto AddPoints = [&](bool IsSave, MachineBasicBlock *MBB,
                        const BitVector &Comps) {
     for (unsigned C : Comps.set_bits()) {
-      if (C != FrameC)
-        Points[MBB].push_back(CalleeSavedInfo(Components[C]));
-      else if (&Points == &CSRSaves)
-        FrameSaves[MBB];
+      if (C == FrameC)
+        (IsSave ? FrameSaves : FrameRestores)[MBB];
       else
-        FrameRestores[MBB];
+        (IsSave ? CSRSaves : CSRRestores)[MBB].push_back(
+            CalleeSavedInfo(Components[C]));
     }
   };
   struct EdgeSplit {
@@ -1868,8 +1827,8 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   };
   SmallVector<EdgeSplit, 4> EdgeSplits;
   for (MachineBasicBlock *MBB : RegionBlocks) {
-    AddPoints(CSRSaves, MBB, ProHead[MBB->getNumber()]);
-    AddPoints(CSRRestores, MBB, EpiTail[MBB->getNumber()]);
+    AddPoints(/*IsSave=*/true, MBB, ProHead[MBB->getNumber()]);
+    AddPoints(/*IsSave=*/false, MBB, EpiTail[MBB->getNumber()]);
     if (IsRegionExit(MBB))
       continue;
     const BitVector &H = Has[MBB->getNumber()];
@@ -1894,8 +1853,8 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
     LLVM_DEBUG(dbgs() << "Split edge " << printMBBReference(*E.From) << " -> "
                       << printMBBReference(*E.To) << " with "
                       << printMBBReference(*NMBB) << '\n');
-    AddPoints(CSRSaves, NMBB, E.Pro);
-    AddPoints(CSRRestores, NMBB, E.Epi);
+    AddPoints(/*IsSave=*/true, NMBB, E.Pro);
+    AddPoints(/*IsSave=*/false, NMBB, E.Epi);
   }
 
   LLVM_DEBUG({
@@ -2001,7 +1960,7 @@ bool NewShrinkWrapImpl::run(MachineFunction &Fn) {
 
   // A restore point that does not return has no epilogue, so the region of
   // the frame extends to all blocks after the prologue.
-  if (Restore && isNoReturnExit(*Restore))
+  if (Restore && Restore->succ_empty() && !Restore->isReturnBlock())
     Restore = nullptr;
   Changed |= shrinkWrapSeparately(Save, Restore);
   return Changed;
