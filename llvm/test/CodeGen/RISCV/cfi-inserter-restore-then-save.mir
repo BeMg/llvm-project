@@ -1,0 +1,38 @@
+# RUN: llc %s -mtriple=riscv64 -run-pass=cfi-instr-inserter \
+# RUN:   -riscv-enable-cfi-instr-inserter=true -verify-cfiinstrs -o - \
+# RUN:   | FileCheck %s
+# RUN: llc %s -mtriple=riscv64 -passes=cfi-instr-inserter \
+# RUN:   -riscv-enable-cfi-instr-inserter=true -verify-cfiinstrs -o - \
+# RUN:   | FileCheck %s
+
+# bb.1 restores s1 and then saves it again, as separate shrink-wrapping can do
+# after tail merging. s1 is saved at the end of bb.1, like at the end of bb.0,
+# so bb.2 needs no CFI and the verifier finds no error.
+---
+name: restore_then_save
+tracksRegLiveness: true
+body:             |
+  ; CHECK-LABEL: name: restore_then_save
+  ; CHECK:       bb.2:
+  ; CHECK-NEXT:    liveins: $x9
+  ; CHECK-NEXT:  {{  $}}
+  ; CHECK-NEXT:    $x9 = LD $x2, 0
+  bb.0.entry:
+    liveins: $x10, $x9, $x2
+    SD $x9, $x2, 0 :: (store (s64))
+    CFI_INSTRUCTION offset $x9, -8
+    BEQ $x10, $x0, %bb.2
+
+  bb.1:
+    liveins: $x9, $x2
+    $x9 = LD $x2, 0 :: (load (s64))
+    CFI_INSTRUCTION restore $x9
+    SD $x9, $x2, 0 :: (store (s64))
+    CFI_INSTRUCTION offset $x9, -8
+
+  bb.2:
+    liveins: $x9, $x2
+    $x9 = LD $x2, 0 :: (load (s64))
+    CFI_INSTRUCTION restore $x9
+    PseudoRET
+...

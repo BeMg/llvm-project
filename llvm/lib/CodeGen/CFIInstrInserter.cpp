@@ -300,7 +300,10 @@ void CFIInstrInserterImpl::calculateOutgoingCFAInfo(MBBCFAInfo &MBBInfo) {
         CSROffset = CFI.getOffset() - SetOffset;
         break;
       case MCCFIInstruction::OpRestore:
+        // The last save or restore of a register in the block gives its
+        // outgoing state.
         CSRRestored.set(CFI.getRegister());
+        CSRSaved.reset(CFI.getRegister());
         break;
       case MCCFIInstruction::OpLLVMDefAspaceCfa:
         // TODO: Add support for handling cfi_def_aspace_cfa.
@@ -365,6 +368,7 @@ void CFIInstrInserterImpl::calculateOutgoingCFAInfo(MBBCFAInfo &MBBInfo) {
           reportFatalInternalError(
               "Different saved locations for the same CSR");
         CSRSaved.set(CFI.getRegister());
+        CSRRestored.reset(CFI.getRegister());
       }
     }
   }
