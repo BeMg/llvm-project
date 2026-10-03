@@ -560,6 +560,108 @@ findNearestCommonDominator(MachineDominatorTree &DT,
   return Dom;
 }
 
+/// After sinkCSRDefs renamed a callee-saved register defined in \p Pro to
+/// \p Scratch (\p Ops are its operands), try to move its def to the successors
+/// if it is a copy, instead of adding a copy there. Then no instruction is
+/// added. The uses of the copy in Pro read its source Src instead, and the
+/// instructions of Pro that overwrite Src after the copy write Scratch instead:
+///
+///   $x5 = COPY $x10                          $x5 = LBU $x11
+///   $x10 = LBU $x11                    =>    BEQ $x5, ...
+///   BEQ $x10, ...                            (successor: $x8 = COPY $x10)
+///
+/// This needs Src to be live out of Pro, so the value Pro writes to Src
+/// cannot be live out. Return Src if the copy was moved, and erase it.
+static MCRegister
+moveCopyDef(MachineBasicBlock &Pro, MCRegister Scratch,
+            ArrayRef<MachineOperand *> Ops, const RegisterClassInfo &RCI,
+            const MachineRegisterInfo &MRI, const TargetRegisterInfo &TRI,
+            function_ref<bool(MCRegister, ArrayRef<MachineOperand *>)>
+                IsAccepted,
+            function_ref<bool(MCRegister)> IsLiveOut) {
+  MachineInstr *Copy = nullptr;
+  for (MachineOperand *MO : Ops)
+    if (MO->isDef()) {
+      if (Copy)
+        return MCRegister();
+      Copy = MO->getParent();
+    }
+  if (!Copy || !Copy->isCopy() || Copy->getOperand(0).getSubReg() ||
+      Copy->getOperand(1).getSubReg() || Copy->getOperand(1).isUndef())
+    return MCRegister();
+  Register Src = Copy->getOperand(1).getReg();
+  if (!Src.isPhysical() || MRI.isReserved(Src) ||
+      RCI.getLastCalleeSavedAlias(Src) || TRI.regsOverlap(Src, Scratch) ||
+      TRI.getRegSizeInBits(*TRI.getMinimalPhysRegClass(Src)) !=
+          TRI.getRegSizeInBits(*TRI.getMinimalPhysRegClass(Scratch)))
+    return MCRegister();
+
+  // The operands of Src that read its value before the copy, the uses of the
+  // copy, and the operands of Src from its first redefinition on.
+  SmallVector<MachineOperand *, 4> SrcUses, CopyUses, Redefs;
+  SmallVector<MachineOperand *, 4> DebugCopyUses, DebugRedefs;
+  bool Redefined = false;
+  for (MachineInstr &MI : make_range(
+           std::next(MachineBasicBlock::iterator(Copy)), Pro.end())) {
+    bool DefinesSrc = false;
+    for (MachineOperand &MO : MI.operands()) {
+      if (MO.isRegMask() && MO.clobbersPhysReg(Src))
+        return MCRegister();
+      if (!MO.isReg() || !MO.getReg())
+        continue;
+      if (MO.getReg() == Scratch && !MO.isDef()) {
+        (MI.isDebugInstr() ? DebugCopyUses : CopyUses).push_back(&MO);
+        continue;
+      }
+      if (!TRI.regsOverlap(MO.getReg(), Src))
+        continue;
+      if (MI.isDebugInstr()) {
+        if (Redefined)
+          DebugRedefs.push_back(&MO);
+        continue;
+      }
+      if (MO.getReg() != Src || MO.getSubReg() || MO.isImplicit() ||
+          !MO.isRenamable())
+        return MCRegister();
+      if (MO.isDef()) {
+        if (MO.isTied() || MO.isEarlyClobber())
+          return MCRegister();
+        DefinesSrc = true;
+      } else {
+        (Redefined ? Redefs : SrcUses).push_back(&MO);
+      }
+    }
+    if (DefinesSrc) {
+      Redefined = true;
+      for (MachineOperand &MO : MI.operands())
+        if (MO.isReg() && MO.isDef() && MO.getReg() == Src)
+          Redefs.push_back(&MO);
+    }
+  }
+  if ((Redefined && IsLiveOut(Src)) || !IsAccepted(Src, CopyUses) ||
+      !IsAccepted(Scratch, Redefs))
+    return MCRegister();
+
+  // Src is now live out of Pro.
+  for (MachineOperand *MO : SrcUses)
+    MO->setIsKill(false);
+  for (MachineOperand *MO : CopyUses) {
+    MO->setReg(Src);
+    MO->setIsKill(false);
+    MO->setIsRenamable();
+  }
+  for (MachineOperand *MO : Redefs) {
+    MO->setReg(Scratch);
+    MO->setIsRenamable();
+  }
+  for (MachineOperand *MO : DebugCopyUses)
+    MO->setReg(Src);
+  for (MachineOperand *MO : DebugRedefs)
+    MO->setReg(Scratch);
+  Copy->eraseFromParent();
+  return Src.asMCReg();
+}
+
 /// GCC moves the copies to callee-saved registers in the entry block down to
 /// the successor that uses them (prepare_shrink_wrap), so that the entry block
 /// does not need the frame. Do the same for the block PRO the prologue would
@@ -572,6 +674,13 @@ findNearestCommonDominator(MachineDominatorTree &DT,
 ///          renamable $x11 = LBU renamable $x8   =>     $x11 = LBU $x5
 ///          BNE ..., %bb.2                              BNE ..., %bb.2
 ///   bb.2:  liveins: $x8                         bb.2:  $x8 = COPY killed $x5
+///
+/// If the def is a copy, the copy itself is moved instead (see moveCopyDef),
+/// so that the path through bb.2 runs no extra instruction:
+///
+///                                               bb.0:  $x5 = LBU $x11
+///                                                      BNE ..., %bb.2
+///                                               bb.2:  $x8 = COPY $x11
 ///
 /// This is only done if it moves PRO down, i.e. the paths through the other
 /// successors do not need the frame.
@@ -722,14 +831,24 @@ bool NewShrinkWrapImpl::sinkCSRDefs() {
       for (MachineOperand &MO : MI.operands())
         if (MI.isDebugInstr() && MO.isReg() && MO.getReg() == Reg)
           MO.setReg(Scratch);
+    // Move the def itself if it is a copy, so that no instruction is added.
+    MCRegister Src = moveCopyDef(
+        *Pro, Scratch, Operands[Reg], *RCI, MF->getRegInfo(), *TRI, IsAccepted,
+        [&](MCRegister R) {
+          return any_of(Pro->successors(), [&](const MachineBasicBlock *Succ) {
+            return OverlapsLiveIn(*Succ, R);
+          });
+        });
+    MCRegister LiveOut = Src ? Src : Scratch;
     for (MachineBasicBlock *Succ : Targets) {
       if (!Succ->isLiveIn(Reg))
         continue;
       BuildMI(*Succ, Succ->begin(), DebugLoc(), TII->get(TargetOpcode::COPY),
               Reg)
-          .addReg(Scratch, RegState::Kill);
+          .addReg(LiveOut, getKillRegState(!Src));
       Succ->removeLiveIn(Reg);
-      Succ->addLiveIn(Scratch);
+      if (!Succ->isLiveIn(LiveOut))
+        Succ->addLiveIn(LiveOut);
       LLVM_DEBUG(dbgs() << "Moved the def of " << printReg(Reg, TRI) << " from "
                         << printMBBReference(*Pro) << " to "
                         << printMBBReference(*Succ) << '\n');
