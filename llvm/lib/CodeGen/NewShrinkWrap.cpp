@@ -167,14 +167,25 @@ class NewShrinkWrapImpl {
   /// The blocks that need the stack frame, in reverse post-order.
   SmallVector<MachineBasicBlock *, 16> FrameBlocks;
 
+  /// The blocks that need the stack frame only because they may access a
+  /// stack object through an address computed earlier, in reverse post-order.
+  /// No stack address exists on the paths that do not run the prologue, so
+  /// these blocks only need to be before the epilogue on the paths that do.
+  SmallVector<MachineBasicBlock *, 16> StackUseBlocks;
+
   const SmallSetVector<MCRegister, 16> &getCurrentCSRs();
 
   /// Check if \p MI uses or defines a callee-saved register or a frame index,
   /// and thus needs the stack frame. This is the same check as in ShrinkWrap.
   bool useOrDefCSROrFI(const MachineInstr &MI, bool StackAddressUsed);
 
-  /// Collect FrameBlocks. Return false if the function cannot be handled.
+  /// Collect FrameBlocks and StackUseBlocks. Return false if the function
+  /// cannot be handled.
   bool collectFrameBlocks();
+
+  /// Return FrameBlocks plus the blocks of StackUseBlocks reachable from
+  /// \p Pro, which the epilogue must come after.
+  SmallVector<MachineBasicBlock *, 16> getRestoreBlocks(MachineBasicBlock *Pro);
 
   /// Make the paths that only need the frame to pass the return value in a
   /// callee-saved register pass it in the return register instead.
@@ -328,6 +339,7 @@ bool NewShrinkWrapImpl::useOrDefCSROrFI(const MachineInstr &MI,
 
 bool NewShrinkWrapImpl::collectFrameBlocks() {
   FrameBlocks.clear();
+  StackUseBlocks.clear();
 
   // Is true for the blocks where stack accesses or computations of
   // stack-relative addresses are possible on some path including the block.
@@ -366,18 +378,49 @@ bool NewShrinkWrapImpl::collectFrameBlocks() {
     bool StackAddressUsed = any_of(MBB->predecessors(), [&](auto *Pred) {
       return StackAddressUsedBlockInfo.test(Pred->getNumber());
     });
+    bool MayAccessStack = false;
+    bool NeedsFrame = false;
     for (const MachineInstr &MI : *MBB) {
-      if (useOrDefCSROrFI(MI, StackAddressUsed)) {
+      if (useOrDefCSROrFI(MI, /*StackAddressUsed=*/false)) {
         LLVM_DEBUG(dbgs() << printMBBReference(*MBB)
                           << " needs the frame due to " << MI);
-        FrameBlocks.push_back(MBB);
-        StackAddressUsed = MayComputeStackAddress;
+        NeedsFrame = true;
         break;
       }
+      if (!MayAccessStack && StackAddressUsed &&
+          useOrDefCSROrFI(MI, /*StackAddressUsed=*/true)) {
+        LLVM_DEBUG(dbgs() << printMBBReference(*MBB)
+                          << " may access the stack due to " << MI);
+        MayAccessStack = true;
+      }
+    }
+    if (NeedsFrame) {
+      FrameBlocks.push_back(MBB);
+      StackAddressUsed = MayComputeStackAddress;
+    } else if (MayAccessStack) {
+      StackUseBlocks.push_back(MBB);
     }
     StackAddressUsedBlockInfo[MBB->getNumber()] = StackAddressUsed;
   }
   return true;
+}
+
+SmallVector<MachineBasicBlock *, 16>
+NewShrinkWrapImpl::getRestoreBlocks(MachineBasicBlock *Pro) {
+  SmallVector<MachineBasicBlock *, 16> Blocks(FrameBlocks.begin(),
+                                              FrameBlocks.end());
+  if (StackUseBlocks.empty())
+    return Blocks;
+  SmallPtrSet<MachineBasicBlock *, 32> Reachable({Pro});
+  SmallVector<MachineBasicBlock *, 16> WorkList({Pro});
+  while (!WorkList.empty())
+    for (MachineBasicBlock *Succ : WorkList.pop_back_val()->successors())
+      if (Reachable.insert(Succ).second)
+        WorkList.push_back(Succ);
+  for (MachineBasicBlock *MBB : StackUseBlocks)
+    if (Reachable.count(MBB))
+      Blocks.push_back(MBB);
+  return Blocks;
 }
 
 /// Return the operand of the last instruction of \p MBB that reads or writes
@@ -977,7 +1020,8 @@ findReturnPathsPostDominators(MachineBasicBlock *Pro,
 
 /// Find the block at the end of which the epilogue goes, for the prologue
 /// placed before \p Pro: the nearest common post-dominator of Pro and all
-/// blocks needing the frame, which is not in a loop (the prologue is not
+/// blocks needing the frame (including the blocks of StackUseBlocks reachable
+/// from Pro, see getRestoreBlocks), which is not in a loop (the prologue is not
 /// either), and whose terminators do not need the frame. If there is no such
 /// block because Pro never reaches a return, see findNoReturnRestorePoint. If
 /// there is none because Pro also reaches blocks that do not return, see
@@ -992,8 +1036,9 @@ MachineBasicBlock *NewShrinkWrapImpl::findRestorePoint(MachineBasicBlock *Pro) {
            TFI->canUseAsEpilogue(*MBB);
   };
 
+  SmallVector<MachineBasicBlock *, 16> RestoreBlocks = getRestoreBlocks(Pro);
   MachineBasicBlock *Restore = Pro;
-  for (MachineBasicBlock *MBB : FrameBlocks) {
+  for (MachineBasicBlock *MBB : RestoreBlocks) {
     Restore = MPDT->findNearestCommonDominator(Restore, MBB);
     if (!Restore)
       break;
@@ -1006,7 +1051,7 @@ MachineBasicBlock *NewShrinkWrapImpl::findRestorePoint(MachineBasicBlock *Pro) {
     // them may need it. Like GCC, which emits no epilogue on the paths that
     // do not return, the other blocks needing the frame keep it.
     for (MachineBasicBlock *MBB :
-         findReturnPathsPostDominators(Pro, FrameBlocks)) {
+         findReturnPathsPostDominators(Pro, RestoreBlocks)) {
       if (!CanRestore(MBB))
         continue;
       SmallPtrSet<MachineBasicBlock *, 16> After;
@@ -1016,7 +1061,7 @@ MachineBasicBlock *NewShrinkWrapImpl::findRestorePoint(MachineBasicBlock *Pro) {
         if (After.insert(Succ).second)
           append_range(WorkList, Succ->successors());
       }
-      if (any_of(FrameBlocks, [&](MachineBasicBlock *FrameMBB) {
+      if (any_of(RestoreBlocks, [&](MachineBasicBlock *FrameMBB) {
             return After.count(FrameMBB);
           }))
         continue;

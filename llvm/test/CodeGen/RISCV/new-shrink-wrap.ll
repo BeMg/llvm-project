@@ -902,3 +902,149 @@ fail:
 ret:
   ret void
 }
+
+; The load in %join uses an address that is not known to be outside the
+; stack, and %join is reached after %cold passes the address of %list to a
+; call. The load needs the frame only on the paths through %cold, as no
+; stack address exists on the other paths. So %join does not keep the
+; prologue in the entry block: it is duplicated, and the hot path through
+; %entry and %join runs without the frame (Stockfish's Position::is_draw).
+declare ptr @gen(ptr, ptr)
+define i32 @stack_use_join(ptr %pos, i32 %ply) {
+;
+; OLD-LABEL: stack_use_join:
+; OLD:       # %bb.0: # %entry
+; OLD-NEXT:    addi sp, sp, -2032
+; OLD-NEXT:    .cfi_def_cfa_offset 2032
+; OLD-NEXT:    sd ra, 2024(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s0, 2016(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s1, 2008(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s2, 2000(sp) # 8-byte Folded Spill
+; OLD-NEXT:    .cfi_offset ra, -8
+; OLD-NEXT:    .cfi_offset s0, -16
+; OLD-NEXT:    .cfi_offset s1, -24
+; OLD-NEXT:    .cfi_offset s2, -32
+; OLD-NEXT:    addi sp, sp, -64
+; OLD-NEXT:    .cfi_def_cfa_offset 2096
+; OLD-NEXT:    ld a2, 0(a0)
+; OLD-NEXT:    lw a3, 0(a2)
+; OLD-NEXT:    li a4, 100
+; OLD-NEXT:    blt a3, a4, .LBB10_4
+; OLD-NEXT:  # %bb.1: # %cold
+; OLD-NEXT:    mv s0, a1
+; OLD-NEXT:    addi a1, sp, 16
+; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    addi s2, sp, 16
+; OLD-NEXT:    call gen
+; OLD-NEXT:    beq a0, s2, .LBB10_3
+; OLD-NEXT:  # %bb.2:
+; OLD-NEXT:    li a0, 1
+; OLD-NEXT:    j .LBB10_5
+; OLD-NEXT:  .LBB10_3: # %reload
+; OLD-NEXT:    ld a2, 0(s1)
+; OLD-NEXT:    mv a1, s0
+; OLD-NEXT:  .LBB10_4: # %join
+; OLD-NEXT:    lw a0, 164(a2)
+; OLD-NEXT:    sext.w a1, a1
+; OLD-NEXT:    slt a1, a0, a1
+; OLD-NEXT:    snez a0, a0
+; OLD-NEXT:    and a0, a1, a0
+; OLD-NEXT:  .LBB10_5: # %ret
+; OLD-NEXT:    addi sp, sp, 64
+; OLD-NEXT:    .cfi_def_cfa_offset 2032
+; OLD-NEXT:    ld ra, 2024(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s0, 2016(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s1, 2008(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s2, 2000(sp) # 8-byte Folded Reload
+; OLD-NEXT:    .cfi_restore ra
+; OLD-NEXT:    .cfi_restore s0
+; OLD-NEXT:    .cfi_restore s1
+; OLD-NEXT:    .cfi_restore s2
+; OLD-NEXT:    addi sp, sp, 2032
+; OLD-NEXT:    .cfi_def_cfa_offset 0
+; OLD-NEXT:    ret
+;
+; NEW-LABEL: stack_use_join:
+; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    ld a2, 0(a0)
+; NEW-NEXT:    lw a3, 0(a2)
+; NEW-NEXT:    li a4, 100
+; NEW-NEXT:    blt a3, a4, .LBB10_3
+; NEW-NEXT:  # %bb.1: # %cold
+; NEW-NEXT:    addi sp, sp, -2032
+; NEW-NEXT:    .cfi_def_cfa_offset 2032
+; NEW-NEXT:    sd ra, 2024(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s0, 2016(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s1, 2008(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s2, 2000(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    .cfi_offset s2, -32
+; NEW-NEXT:    addi sp, sp, -64
+; NEW-NEXT:    .cfi_def_cfa_offset 2096
+; NEW-NEXT:    .cfi_remember_state
+; NEW-NEXT:    mv s0, a1
+; NEW-NEXT:    addi a1, sp, 16
+; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    addi s2, sp, 16
+; NEW-NEXT:    call gen
+; NEW-NEXT:    beq a0, s2, .LBB10_4
+; NEW-NEXT:  # %bb.2:
+; NEW-NEXT:    li a0, 1
+; NEW-NEXT:    j .LBB10_5
+; NEW-NEXT:  .LBB10_3: # %join
+; NEW-NEXT:    lw a0, 164(a2)
+; NEW-NEXT:    sext.w a1, a1
+; NEW-NEXT:    slt a1, a0, a1
+; NEW-NEXT:    snez a0, a0
+; NEW-NEXT:    and a0, a1, a0
+; NEW-NEXT:    ret
+; NEW-NEXT:  .LBB10_4: # %reload
+; NEW-NEXT:    .cfi_restore_state
+; NEW-NEXT:    ld a2, 0(s1)
+; NEW-NEXT:    lw a0, 164(a2)
+; NEW-NEXT:    sext.w a1, s0
+; NEW-NEXT:    slt a1, a0, a1
+; NEW-NEXT:    snez a0, a0
+; NEW-NEXT:    and a0, a1, a0
+; NEW-NEXT:  .LBB10_5: # %ret
+; NEW-NEXT:    addi sp, sp, 64
+; NEW-NEXT:    .cfi_def_cfa_offset 2032
+; NEW-NEXT:    ld ra, 2024(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s0, 2016(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s1, 2008(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s2, 2000(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    .cfi_restore s2
+; NEW-NEXT:    addi sp, sp, 2032
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:    ret
+entry:
+  %list = alloca [256 x i64]
+  %st = load ptr, ptr %pos
+  %r50 = load i32, ptr %st
+  %big = icmp sgt i32 %r50, 99
+  br i1 %big, label %cold, label %join
+cold:
+  %last = call ptr @gen(ptr %pos, ptr %list)
+  %empty = icmp eq ptr %last, %list
+  br i1 %empty, label %reload, label %ret
+reload:
+  %st2 = load ptr, ptr %pos
+  br label %join
+join:
+  %s = phi ptr [%st, %entry], [%st2, %reload]
+  %rep.p = getelementptr i8, ptr %s, i64 164
+  %rep = load i32, ptr %rep.p
+  %lt = icmp slt i32 %rep, %ply
+  %nz = icmp ne i32 %rep, 0
+  %a = and i1 %lt, %nz
+  %z = zext i1 %a to i32
+  br label %ret
+ret:
+  %r = phi i32 [1, %cold], [%z, %join]
+  ret i32 %r
+}
