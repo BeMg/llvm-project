@@ -1369,12 +1369,14 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
   if (!EnableSeparateShrinkWrap || !TFI->enableSeparateCSRShrinkWrapping(*MF))
     return false;
 
-  // GCC does not handle these "strange" functions either.
+  // GCC does not handle these "strange" functions either. Like GCC, handle
+  // the landing pads, with no code on the edges to them other than saves at
+  // their start, see below.
   const MachineFrameInfo &MFI = MF->getFrameInfo();
   if (MFI.hasVarSizedObjects() || MF->exposesReturnsTwice() ||
       MF->callsEHReturn() || MF->callsUnwindInit() || MF->hasEHFunclets() ||
       any_of(*MF, [](const MachineBasicBlock &MBB) {
-        return MBB.isEHPad() || MBB.isInlineAsmBrIndirectTarget();
+        return MBB.isInlineAsmBrIndirectTarget();
       }))
     return false;
 
@@ -1685,8 +1687,20 @@ bool NewShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
       Pro.reset(H);
       Pro.reset(ProHead[Succ->getNumber()]);
       Epi.reset(SH);
-      Epi.reset(EpiTail[MBB->getNumber()]);
+      // The unwinder goes to a landing pad from the middle of MBB, so the
+      // restores at the end of MBB do not cover the edge. The saves at the
+      // start of a landing pad do (GCC puts them on the edge, which it does
+      // not have to split when the pad has a single predecessor).
+      if (!Succ->isEHPad())
+        Epi.reset(EpiTail[MBB->getNumber()]);
       Pro |= Epi;
+      if (Pro.anyCommon(Active) && Succ->isEHPad()) {
+        LLVM_DEBUG(dbgs() << "Cannot put code on the EH edge "
+                          << printMBBReference(*MBB) << " -> "
+                          << printMBBReference(*Succ) << '\n');
+        Active.reset(Pro);
+        continue;
+      }
       Pro &= Active;
       if (Pro.any() && !MBB->canSplitCriticalEdge(Succ)) {
         LLVM_DEBUG(dbgs() << "Cannot split edge " << printMBBReference(*MBB)

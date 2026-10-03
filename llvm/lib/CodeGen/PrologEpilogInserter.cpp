@@ -736,15 +736,16 @@ static bool finalizeSeparateCSRPoints(MachineFunction &MF) {
   return true;
 }
 
-/// Insert spill code for the callee-saved registers used in the function.
+/// Insert spill code for the callee-saved registers used in the function,
+/// before \p I in \p SaveBlock.
 static void insertCSRSaves(MachineBasicBlock &SaveBlock,
+                           MachineBasicBlock::iterator I,
                            ArrayRef<CalleeSavedInfo> CSI) {
   MachineFunction &MF = *SaveBlock.getParent();
   const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
   const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
 
-  MachineBasicBlock::iterator I = SaveBlock.begin();
   if (!TFI->spillCalleeSavedRegisters(SaveBlock, I, CSI, TRI)) {
     for (const CalleeSavedInfo &CS : CSI) {
       TFI->spillCalleeSavedRegister(SaveBlock, I, CS, TII, TRI);
@@ -795,7 +796,7 @@ void PEIImpl::spillSeparatelyWrappedCalleeSavedRegs(MachineFunction &MF) {
     NumLeafFuncWithSpills++;
 
   for (MachineBasicBlock *SaveBlock : SaveBlocks)
-    insertCSRSaves(*SaveBlock,
+    insertCSRSaves(*SaveBlock, SaveBlock->begin(),
                    MFI.getCalleeSavedInfoForBlock(*SaveBlock, /*IsSave=*/true));
 
   // Visit the blocks in layout order to keep the output deterministic.
@@ -803,8 +804,12 @@ void PEIImpl::spillSeparatelyWrappedCalleeSavedRegs(MachineFunction &MF) {
     auto It = MFI.getCSRSavePoints().find(&MBB);
     if (It == MFI.getCSRSavePoints().end() || is_contained(SaveBlocks, &MBB))
       continue;
-    MachineInstr *InsertBefore = MBB.empty() ? nullptr : &MBB.front();
-    insertCSRSaves(MBB, It->second);
+    // In a landing pad, the saves go after the label, where the unwinder
+    // enters.
+    MachineBasicBlock::iterator I =
+        MBB.isEHPad() ? MBB.SkipPHIsAndLabels(MBB.begin()) : MBB.begin();
+    MachineInstr *InsertBefore = I == MBB.end() ? nullptr : &*I;
+    insertCSRSaves(MBB, I, It->second);
     SeparateCSRPoints.push_back({&MBB, InsertBefore, It->second, true});
   }
 
@@ -877,7 +882,7 @@ void PEIImpl::spillCalleeSavedRegs(MachineFunction &MF) {
         NumLeafFuncWithSpills++;
 
       for (MachineBasicBlock *SaveBlock : SaveBlocks)
-        insertCSRSaves(*SaveBlock, CSI);
+        insertCSRSaves(*SaveBlock, SaveBlock->begin(), CSI);
 
       // Update the live-in information of all the blocks up to the save point.
       updateLiveness(MF);

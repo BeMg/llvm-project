@@ -1223,3 +1223,297 @@ ret:
   %r = phi i32 [ %ra, %a ], [ %rb, %b ], [ %rc, %c ], [ %rd, %d ], [ %s2, %big ]
   ret i32 %r
 }
+
+declare i32 @__gxx_personality_v0(...)
+declare void @use_ptr(ptr)
+
+; Separate shrink-wrapping with a landing pad. The landing pad ends with
+; _Unwind_Resume, so it needs all components. Its invoke block does not have
+; the register that only the cold block %work uses, so the landing pad saves
+; it after its label, where the unwinder enters.
+define i32 @separate_landing_pad(i32 %x, ptr %p) personality ptr @__gxx_personality_v0 {
+; OLD-LABEL: separate_landing_pad:
+; OLD:       # %bb.0: # %entry
+; OLD-NEXT:    addi sp, sp, -32
+; OLD-NEXT:    .cfi_def_cfa_offset 32
+; OLD-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
+; OLD-NEXT:    .cfi_offset ra, -8
+; OLD-NEXT:    .cfi_offset s0, -16
+; OLD-NEXT:    .cfi_offset s1, -24
+; OLD-NEXT:    .cfi_offset s2, -32
+; OLD-NEXT:    .cfi_remember_state
+; OLD-NEXT:    mv s0, a1
+; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    call f
+; OLD-NEXT:    sext.w a0, a0
+; OLD-NEXT:    beqz a0, .LBB12_2
+; OLD-NEXT:  .LBB12_1: # %ret
+; OLD-NEXT:    mv a0, s1
+; OLD-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
+; OLD-NEXT:    .cfi_restore ra
+; OLD-NEXT:    .cfi_restore s0
+; OLD-NEXT:    .cfi_restore s1
+; OLD-NEXT:    .cfi_restore s2
+; OLD-NEXT:    addi sp, sp, 32
+; OLD-NEXT:    .cfi_def_cfa_offset 0
+; OLD-NEXT:    ret
+; OLD-NEXT:  .LBB12_2: # %init
+; OLD-NEXT:    .cfi_restore_state
+; OLD-NEXT:  .Ltmp0: # EH_LABEL
+; OLD-NEXT:    call f
+; OLD-NEXT:  .Ltmp1: # EH_LABEL
+; OLD-NEXT:  # %bb.3: # %cont
+; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    sext.w a0, a0
+; OLD-NEXT:    bnez a0, .LBB12_1
+; OLD-NEXT:  # %bb.4: # %work
+; OLD-NEXT:    li a0, 1
+; OLD-NEXT:    call f
+; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    li a0, 2
+; OLD-NEXT:    call f
+; OLD-NEXT:    mv s2, a0
+; OLD-NEXT:    li a0, 3
+; OLD-NEXT:    call f
+; OLD-NEXT:    add s1, s1, s2
+; OLD-NEXT:    addw s1, s1, a0
+; OLD-NEXT:    mv a0, s0
+; OLD-NEXT:    call use_ptr
+; OLD-NEXT:    j .LBB12_1
+; OLD-NEXT:  .LBB12_5: # %lpad
+; OLD-NEXT:  .Ltmp2: # EH_LABEL
+; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    mv a0, s0
+; OLD-NEXT:    call use_ptr
+; OLD-NEXT:    mv a0, s1
+; OLD-NEXT:    call _Unwind_Resume
+;
+; NEW-LABEL: separate_landing_pad:
+; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    addi sp, sp, -32
+; NEW-NEXT:    .cfi_def_cfa_offset 32
+; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    mv s0, a1
+; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    call f
+; NEW-NEXT:    sext.w a0, a0
+; NEW-NEXT:    beqz a0, .LBB12_2
+; NEW-NEXT:  .LBB12_1: # %ret
+; NEW-NEXT:    mv a0, s1
+; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    addi sp, sp, 32
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:    ret
+; NEW-NEXT:  .LBB12_2: # %init
+; NEW-NEXT:    .cfi_def_cfa_offset 32
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:  .Ltmp0: # EH_LABEL
+; NEW-NEXT:    call f
+; NEW-NEXT:  .Ltmp1: # EH_LABEL
+; NEW-NEXT:  # %bb.3: # %cont
+; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    sext.w a0, a0
+; NEW-NEXT:    bnez a0, .LBB12_1
+; NEW-NEXT:  # %bb.4: # %work
+; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset s2, -32
+; NEW-NEXT:    li a0, 1
+; NEW-NEXT:    call f
+; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    li a0, 2
+; NEW-NEXT:    call f
+; NEW-NEXT:    mv s2, a0
+; NEW-NEXT:    li a0, 3
+; NEW-NEXT:    call f
+; NEW-NEXT:    add s1, s1, s2
+; NEW-NEXT:    addw s1, s1, a0
+; NEW-NEXT:    mv a0, s0
+; NEW-NEXT:    call use_ptr
+; NEW-NEXT:    ld s2, 0(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore s2
+; NEW-NEXT:    j .LBB12_1
+; NEW-NEXT:  .LBB12_5: # %lpad
+; NEW-NEXT:  .Ltmp2: # EH_LABEL
+; NEW-NEXT:    sd s2, 0(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset s2, -32
+; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    mv a0, s0
+; NEW-NEXT:    call use_ptr
+; NEW-NEXT:    mv a0, s1
+; NEW-NEXT:    call _Unwind_Resume
+entry:
+  %v = call i32 @f(i32 %x)
+  %c = icmp eq i32 %v, 0
+  br i1 %c, label %init, label %ret, !prof !0
+init:
+  %w = invoke i32 @f(i32 0)
+          to label %cont unwind label %lpad
+cont:
+  %cw = icmp eq i32 %w, 0
+  br i1 %cw, label %work, label %ret, !prof !0
+work:
+  %a = call i32 @f(i32 1)
+  %b = call i32 @f(i32 2)
+  %d = call i32 @f(i32 3)
+  %s1 = add i32 %a, %b
+  %s2 = add i32 %s1, %d
+  call void @use_ptr(ptr %p)
+  br label %ret
+ret:
+  %r = phi i32 [ %x, %entry ], [ %w, %cont ], [ %s2, %work ]
+  ret i32 %r
+lpad:
+  %lp = landingpad { ptr, i32 }
+          cleanup
+  call void @use_ptr(ptr %p)
+  resume { ptr, i32 } %lp
+}
+
+declare ptr @__cxa_begin_catch(ptr)
+declare void @__cxa_end_catch()
+
+; The blocks %a and %b share a landing pad, which returns. Only %a uses s1,
+; and only before its invoke, so the restore of s1 would go at the end of %a.
+; This restore does not run when the unwinder goes to the landing pad, and the
+; edge to a landing pad cannot hold code, so the prologue saves s1.
+define void @separate_landing_pad_restore(i32 %x, ptr %p) personality ptr @__gxx_personality_v0 {
+; OLD-LABEL: separate_landing_pad_restore:
+; OLD:       # %bb.0: # %entry
+; OLD-NEXT:    addi sp, sp, -32
+; OLD-NEXT:    .cfi_def_cfa_offset 32
+; OLD-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; OLD-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; OLD-NEXT:    .cfi_offset ra, -8
+; OLD-NEXT:    .cfi_offset s0, -16
+; OLD-NEXT:    .cfi_offset s1, -24
+; OLD-NEXT:    .cfi_remember_state
+; OLD-NEXT:    sext.w a0, a0
+; OLD-NEXT:    mv s0, a1
+; OLD-NEXT:    beqz a0, .LBB13_2
+; OLD-NEXT:  # %bb.1: # %b
+; OLD-NEXT:  .Ltmp3: # EH_LABEL
+; OLD-NEXT:    mv a0, s0
+; OLD-NEXT:    call use_ptr
+; OLD-NEXT:  .Ltmp4: # EH_LABEL
+; OLD-NEXT:    j .LBB13_3
+; OLD-NEXT:  .LBB13_2: # %a
+; OLD-NEXT:    li a0, 1
+; OLD-NEXT:    call f
+; OLD-NEXT:    mv s1, a0
+; OLD-NEXT:    li a0, 2
+; OLD-NEXT:    call f
+; OLD-NEXT:    add a0, s1, a0
+; OLD-NEXT:    sw a0, 0(s0)
+; OLD-NEXT:  .Ltmp5: # EH_LABEL
+; OLD-NEXT:    mv a0, s0
+; OLD-NEXT:    call use_ptr
+; OLD-NEXT:  .Ltmp6: # EH_LABEL
+; OLD-NEXT:  .LBB13_3: # %ret
+; OLD-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; OLD-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; OLD-NEXT:    .cfi_restore ra
+; OLD-NEXT:    .cfi_restore s0
+; OLD-NEXT:    .cfi_restore s1
+; OLD-NEXT:    addi sp, sp, 32
+; OLD-NEXT:    .cfi_def_cfa_offset 0
+; OLD-NEXT:    ret
+; OLD-NEXT:  .LBB13_4: # %lpad
+; OLD-NEXT:    .cfi_restore_state
+; OLD-NEXT:  .Ltmp7: # EH_LABEL
+; OLD-NEXT:    call __cxa_begin_catch
+; OLD-NEXT:    call __cxa_end_catch
+; OLD-NEXT:    j .LBB13_3
+;
+; NEW-LABEL: separate_landing_pad_restore:
+; NEW:       # %bb.0: # %entry
+; NEW-NEXT:    addi sp, sp, -32
+; NEW-NEXT:    .cfi_def_cfa_offset 32
+; NEW-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
+; NEW-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
+; NEW-NEXT:    .cfi_offset ra, -8
+; NEW-NEXT:    .cfi_offset s0, -16
+; NEW-NEXT:    .cfi_offset s1, -24
+; NEW-NEXT:    .cfi_remember_state
+; NEW-NEXT:    sext.w a0, a0
+; NEW-NEXT:    mv s0, a1
+; NEW-NEXT:    beqz a0, .LBB13_2
+; NEW-NEXT:  # %bb.1: # %b
+; NEW-NEXT:  .Ltmp3: # EH_LABEL
+; NEW-NEXT:    mv a0, s0
+; NEW-NEXT:    call use_ptr
+; NEW-NEXT:  .Ltmp4: # EH_LABEL
+; NEW-NEXT:    j .LBB13_3
+; NEW-NEXT:  .LBB13_2: # %a
+; NEW-NEXT:    li a0, 1
+; NEW-NEXT:    call f
+; NEW-NEXT:    mv s1, a0
+; NEW-NEXT:    li a0, 2
+; NEW-NEXT:    call f
+; NEW-NEXT:    add a0, s1, a0
+; NEW-NEXT:    sw a0, 0(s0)
+; NEW-NEXT:  .Ltmp5: # EH_LABEL
+; NEW-NEXT:    mv a0, s0
+; NEW-NEXT:    call use_ptr
+; NEW-NEXT:  .Ltmp6: # EH_LABEL
+; NEW-NEXT:  .LBB13_3: # %ret
+; NEW-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
+; NEW-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
+; NEW-NEXT:    .cfi_restore ra
+; NEW-NEXT:    .cfi_restore s0
+; NEW-NEXT:    .cfi_restore s1
+; NEW-NEXT:    addi sp, sp, 32
+; NEW-NEXT:    .cfi_def_cfa_offset 0
+; NEW-NEXT:    ret
+; NEW-NEXT:  .LBB13_4: # %lpad
+; NEW-NEXT:    .cfi_restore_state
+; NEW-NEXT:  .Ltmp7: # EH_LABEL
+; NEW-NEXT:    call __cxa_begin_catch
+; NEW-NEXT:    call __cxa_end_catch
+; NEW-NEXT:    j .LBB13_3
+entry:
+  %c = icmp eq i32 %x, 0
+  br i1 %c, label %a, label %b
+a:
+  %a1 = call i32 @f(i32 1)
+  %a2 = call i32 @f(i32 2)
+  %s = add i32 %a1, %a2
+  store i32 %s, ptr %p
+  invoke void @use_ptr(ptr %p)
+          to label %ret unwind label %lpad
+b:
+  invoke void @use_ptr(ptr %p)
+          to label %ret unwind label %lpad
+lpad:
+  %lp = landingpad { ptr, i32 }
+          catch ptr null
+  %e = extractvalue { ptr, i32 } %lp, 0
+  %o = call ptr @__cxa_begin_catch(ptr %e)
+  call void @__cxa_end_catch()
+  br label %ret
+ret:
+  ret void
+}
+
+!0 = !{!"branch_weights", i32 1, i32 1000}
