@@ -1490,18 +1490,16 @@ void ScheduleDAGMILive::initRegPressure() {
   // schedule gains. Do not count these registers in the limits there.
   if (MLI && !MLI->getLoopFor(BB) &&
       TRI->excludeCSRsFromSchedPressureLimit(MF)) {
-    if (CSRPressure.empty()) {
-      CSRPressure.assign(TRI->getNumRegPressureSets(), 0);
-      for (unsigned PSet = 0, E = CSRPressure.size(); PSet != E; ++PSet) {
-        const TargetRegisterClass *RC =
-            TRI->getLargestRegClassForRegPressureSet(PSet);
-        if (!RC)
-          continue;
-        unsigned Weight = TRI->getRegClassWeight(RC).RegWeight;
-        for (const MCPhysReg *CSR = MRI.getCalleeSavedRegs(); *CSR; ++CSR)
-          if (RC->contains(*CSR) && MRI.isAllocatable(*CSR))
-            CSRPressure[PSet] += Weight;
-      }
+    std::vector<unsigned> CSRPressure(TRI->getNumRegPressureSets(), 0);
+    for (unsigned PSet = 0, E = CSRPressure.size(); PSet != E; ++PSet) {
+      const TargetRegisterClass *RC =
+          TRI->getLargestRegClassForRegPressureSet(PSet);
+      if (!RC)
+        continue;
+      unsigned Weight = TRI->getRegClassWeight(RC).RegWeight;
+      for (const MCPhysReg *CSR = MRI.getCalleeSavedRegs(); *CSR; ++CSR)
+        if (RC->contains(*CSR) && MRI.isAllocatable(*CSR))
+          CSRPressure[PSet] += Weight;
     }
     TopRPTracker.setLimitReduction(CSRPressure);
     BotRPTracker.setLimitReduction(CSRPressure);
@@ -1787,8 +1785,7 @@ bool ScheduleDAGMILive::exceedsReducedLimit() const {
     if (!BotRPTracker.hasLimitReduction(PSet))
       continue;
     unsigned Limit = BotRPTracker.getPSetLimit(PSet);
-    unsigned New = std::max(PSet < Top.size() ? Top[PSet] : 0,
-                            PSet < Bot.size() ? Bot[PSet] : 0);
+    unsigned New = std::max(Top[PSet], Bot[PSet]);
     if (Orig[PSet] <= Limit && New > Limit) {
       LLVM_DEBUG(dbgs() << "Restore the original order: "
                         << TRI->getRegPressureSetName(PSet) << " " << New
@@ -1809,20 +1806,16 @@ void ScheduleDAGMILive::restoreOriginalOrder() {
   for (SUnit &SU : SUnits) {
     MachineInstr *MI = SU.getInstr();
     Cursor = skipDebugInstructionsForward(Cursor, RegionEnd);
-    if (MI->getIterator() == Cursor) {
-      // Earlier moves can leave the slot index of MI below the one of the
-      // instruction before it.
-      SlotIndex PrevIdx = LIS->getSlotIndexes()->getIndexBefore(*MI);
-      if (PrevIdx >= LIS->getInstructionIndex(*MI))
-        LIS->handleMove(*MI, /*UpdateFlags=*/true);
-      ++Cursor;
+    if (MI->getIterator() != Cursor) {
+      moveInstruction(MI, Cursor);
       continue;
     }
-    bool AtBegin = Cursor == RegionBegin;
-    BB->splice(Cursor, BB, MI);
-    LIS->handleMove(*MI, /*UpdateFlags=*/true);
-    if (AtBegin)
-      RegionBegin = MI->getIterator();
+    // Earlier moves can leave the slot index of MI below the one of the
+    // instruction before it.
+    if (LIS->getSlotIndexes()->getIndexBefore(*MI) >=
+        LIS->getInstructionIndex(*MI))
+      LIS->handleMove(*MI, /*UpdateFlags=*/true);
+    ++Cursor;
   }
 }
 

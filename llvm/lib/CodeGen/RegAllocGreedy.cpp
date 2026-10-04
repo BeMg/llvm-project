@@ -2450,24 +2450,20 @@ BlockFrequency RAGreedy::calcRematCost(const LiveInterval &LI) {
 MCRegister RAGreedy::tryAssignCSRFirstTime(
     const LiveInterval &VirtReg, AllocationOrder &Order, MCRegister PhysReg,
     uint8_t &CostPerUseLimit, SmallVectorImpl<Register> &NewVRegs) {
-  LiveRangeStage Stage = ExtraInfo->getStage(VirtReg);
-  if (Stage == RS_Spill && VirtReg.isSpillable()) {
-    // We choose spill over using the CSR for the first time if the spill cost
-    // is lower than CSRCost.
-    SA->analyze(&VirtReg);
-    if (calcSpillCost(VirtReg) >= CSRCost)
-      return PhysReg;
-
-    // We are going to spill, set CostPerUseLimit to 1 to make sure that
-    // we will not use a callee-saved register in tryEvict.
-    CostPerUseLimit = 1;
-    return MCRegister();
-  }
+  // We are going to spill, set CostPerUseLimit to 1 to make sure that we will
+  // not use a callee-saved register in tryEvict.
   auto Spill = [&]() {
     ExtraInfo->setStage(VirtReg, RS_Spill);
     CostPerUseLimit = 1;
     return MCRegister();
   };
+  LiveRangeStage Stage = ExtraInfo->getStage(VirtReg);
+  if (Stage == RS_Spill && VirtReg.isSpillable()) {
+    // We choose spill over using the CSR for the first time if the spill cost
+    // is lower than CSRCost.
+    SA->analyze(&VirtReg);
+    return calcSpillCost(VirtReg) >= CSRCost ? PhysReg : Spill();
+  }
   // See TargetRegisterInfo::compareCSRFirstUseWithSpill.
   bool CompareWithSpill = TRI->compareCSRFirstUseWithSpill(*MF);
 
