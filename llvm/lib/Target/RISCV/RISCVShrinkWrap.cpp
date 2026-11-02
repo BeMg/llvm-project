@@ -1,10 +1,16 @@
-//===- ShrinkWrap.cpp - Compute safe point for prolog/epilog insertion ----===//
+//===- RISCVShrinkWrap.cpp - Safe point for prolog/epilog insertion -------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// This file is a copy of llvm/lib/CodeGen/ShrinkWrap.cpp for RISC-V. The RISC-V
+// pipeline runs this pass instead of the generic ShrinkWrap pass. RISC-V
+// specific shrink-wrapping features are added here, so that the generic pass
+// and the other targets do not change. A fix to ShrinkWrap.cpp must also be
+// applied to this file.
 //
 // This pass looks for safe point where the prologue and epilogue can be
 // inserted.
@@ -47,7 +53,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/ShrinkWrap.h"
+#include "RISCV.h"
+#include "RISCVSubtarget.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SetVector.h"
@@ -88,19 +95,12 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "shrink-wrap"
+#define DEBUG_TYPE "riscv-shrink-wrap"
 
 STATISTIC(NumFunc, "Number of functions");
 STATISTIC(NumCandidates, "Number of shrink-wrapping candidates");
 STATISTIC(NumCandidatesDropped,
           "Number of shrink-wrapping candidates dropped because of frequency");
-
-static cl::opt<cl::boolOrDefault>
-EnableShrinkWrapOpt("enable-shrink-wrap", cl::Hidden,
-                    cl::desc("enable the shrink-wrapping pass"));
-static cl::opt<bool> EnablePostShrinkWrapOpt(
-    "enable-shrink-wrap-region-split", cl::init(true), cl::Hidden,
-    cl::desc("enable splitting of the restore block if possible"));
 
 namespace {
 
@@ -111,7 +111,7 @@ namespace {
 /// does not rely on expensive data-flow analysis. Instead we use the
 /// dominance properties and loop information to decide which point
 /// are safe for such insertion.
-class ShrinkWrapImpl {
+class RISCVShrinkWrapImpl {
   /// Hold callee-saved information.
   const RegisterClassInfo *RCI = nullptr;
   MachineDominatorTree *MDT = nullptr;
@@ -244,10 +244,10 @@ class ShrinkWrapImpl {
   bool ArePointsInteresting() const { return Save != Entry && Save && Restore; }
 
 public:
-  ShrinkWrapImpl(const RegisterClassInfo *RCI, MachineDominatorTree *MDT,
-                 MachinePostDominatorTree *MPDT,
-                 MachineBlockFrequencyInfo *MBFI, MachineLoopInfo *MLI,
-                 MachineOptimizationRemarkEmitter *ORE)
+  RISCVShrinkWrapImpl(const RegisterClassInfo *RCI, MachineDominatorTree *MDT,
+                      MachinePostDominatorTree *MPDT,
+                      MachineBlockFrequencyInfo *MBFI, MachineLoopInfo *MLI,
+                      MachineOptimizationRemarkEmitter *ORE)
       : RCI(RCI), MDT(MDT), MPDT(MPDT), MBFI(MBFI), MLI(MLI), ORE(ORE) {}
 
   /// Check if shrink wrapping is enabled for this target and function.
@@ -256,11 +256,11 @@ public:
   bool run(MachineFunction &MF);
 };
 
-class ShrinkWrapLegacy : public MachineFunctionPass {
+class RISCVShrinkWrap : public MachineFunctionPass {
 public:
   static char ID;
 
-  ShrinkWrapLegacy() : MachineFunctionPass(ID) {}
+  RISCVShrinkWrap() : MachineFunctionPass(ID) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesAll();
@@ -277,7 +277,9 @@ public:
     return MachineFunctionProperties().setNoVRegs();
   }
 
-  StringRef getPassName() const override { return "Shrink Wrapping analysis"; }
+  StringRef getPassName() const override {
+    return "RISC-V Shrink Wrapping analysis";
+  }
 
   /// Perform the shrink-wrapping analysis and update
   /// the MachineFrameInfo attached to \p MF with the results.
@@ -286,23 +288,24 @@ public:
 
 } // end anonymous namespace
 
-char ShrinkWrapLegacy::ID = 0;
+char RISCVShrinkWrap::ID = 0;
 
-char &llvm::ShrinkWrapID = ShrinkWrapLegacy::ID;
+char &llvm::RISCVShrinkWrapID = RISCVShrinkWrap::ID;
 
-INITIALIZE_PASS_BEGIN(ShrinkWrapLegacy, DEBUG_TYPE, "Shrink Wrap Pass", false,
-                      false)
+INITIALIZE_PASS_BEGIN(RISCVShrinkWrap, DEBUG_TYPE, "RISC-V Shrink Wrap Pass",
+                      false, false)
 INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MachinePostDominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MachineLoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MachineOptimizationRemarkEmitterPass)
 INITIALIZE_PASS_DEPENDENCY(MachineRegisterClassInfoWrapperPass)
-INITIALIZE_PASS_END(ShrinkWrapLegacy, DEBUG_TYPE, "Shrink Wrap Pass", false,
-                    false)
+INITIALIZE_PASS_END(RISCVShrinkWrap, DEBUG_TYPE, "RISC-V Shrink Wrap Pass",
+                    false, false)
 
-bool ShrinkWrapImpl::useOrDefCSROrFI(const MachineInstr &MI, RegScavenger *RS,
-                                     bool StackAddressUsed) const {
+bool RISCVShrinkWrapImpl::useOrDefCSROrFI(const MachineInstr &MI,
+                                          RegScavenger *RS,
+                                          bool StackAddressUsed) const {
   /// Check if \p Op is known to access an address not on the function's stack .
   /// At the moment, accesses where the underlying object is a global, function
   /// argument, or jump table are considered non-stack accesses. Note that the
@@ -559,7 +562,7 @@ static void rollbackRestoreSplit(MachineFunction &MF, MachineBasicBlock *NMBB,
 // A block is deemed fit for restore point split iff there exist
 // 1. DirtyPreds - preds of CurRestore reachable from use or def of CSR/FI
 // 2. CleanPreds - preds of CurRestore that arent DirtyPreds
-bool ShrinkWrapImpl::checkIfRestoreSplittable(
+bool RISCVShrinkWrapImpl::checkIfRestoreSplittable(
     const MachineBasicBlock *CurRestore,
     const DenseSet<const MachineBasicBlock *> &ReachableByDirty,
     SmallVectorImpl<MachineBasicBlock *> &DirtyPreds,
@@ -582,9 +585,12 @@ bool ShrinkWrapImpl::checkIfRestoreSplittable(
   return !(CleanPreds.empty() || DirtyPreds.empty());
 }
 
-bool ShrinkWrapImpl::postShrinkWrapping(bool HasCandidate, MachineFunction &MF,
-                                        RegScavenger *RS) {
-  if (!EnablePostShrinkWrapOpt)
+bool RISCVShrinkWrapImpl::postShrinkWrapping(bool HasCandidate,
+                                             MachineFunction &MF,
+                                             RegScavenger *RS) {
+  if (!MF.getSubtarget<RISCVSubtarget>()
+           .getCLOpts()
+           .enable_shrink_wrap_region_split)
     return false;
 
   MachineBasicBlock *InitSave = nullptr;
@@ -654,15 +660,14 @@ bool ShrinkWrapImpl::postShrinkWrapping(bool HasCandidate, MachineFunction &MF,
                      /*Entry freq has been observed more than a loop block in
                         some cases*/
                      MLI->getLoopFor(NewSave))) {
-    SmallVector<MachineBasicBlock*> ReachablePreds;
-    for (auto BB: NewSave->predecessors())
+    SmallVector<MachineBasicBlock *> ReachablePreds;
+    for (auto BB : NewSave->predecessors())
       if (MDT->isReachableFromEntry(BB))
         ReachablePreds.push_back(BB);
     if (ReachablePreds.empty())
       break;
 
-    NewSave = FindIDom<>(**ReachablePreds.begin(), ReachablePreds, *MDT,
-                         false);
+    NewSave = FindIDom<>(**ReachablePreds.begin(), ReachablePreds, *MDT, false);
   }
 
   const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
@@ -699,8 +704,8 @@ bool ShrinkWrapImpl::postShrinkWrapping(bool HasCandidate, MachineFunction &MF,
   return true;
 }
 
-void ShrinkWrapImpl::updateSaveRestorePoints(MachineBasicBlock &MBB,
-                                             RegScavenger *RS) {
+void RISCVShrinkWrapImpl::updateSaveRestorePoints(MachineBasicBlock &MBB,
+                                                  RegScavenger *RS) {
   // Get rid of the easy cases first.
   if (!Save)
     Save = &MBB;
@@ -797,12 +802,12 @@ void ShrinkWrapImpl::updateSaveRestorePoints(MachineBasicBlock &MBB,
       } else {
         // If the loop does not exit, there is no point in looking
         // for a post-dominator outside the loop.
-        SmallVector<MachineBasicBlock*, 4> ExitBlocks;
+        SmallVector<MachineBasicBlock *, 4> ExitBlocks;
         MLI->getLoopFor(Restore)->getExitingBlocks(ExitBlocks);
         // Push Restore outside of this loop.
         // Look for the immediate post-dominator of the loop exits.
         MachineBasicBlock *IPdom = Restore;
-        for (MachineBasicBlock *LoopExitBB: ExitBlocks) {
+        for (MachineBasicBlock *LoopExitBB : ExitBlocks) {
           IPdom = FindIDom<>(*IPdom, LoopExitBB->successors(), *MPDT);
           if (!IPdom)
             break;
@@ -834,7 +839,7 @@ static bool giveUpWithRemarks(MachineOptimizationRemarkEmitter *ORE,
   return false;
 }
 
-bool ShrinkWrapImpl::performShrinkWrapping(
+bool RISCVShrinkWrapImpl::performShrinkWrapping(
     const ReversePostOrderTraversal<MachineBasicBlock *> &RPOT,
     RegScavenger *RS) {
   for (MachineBasicBlock *MBB : RPOT) {
@@ -943,7 +948,7 @@ bool ShrinkWrapImpl::performShrinkWrapping(
   return true;
 }
 
-bool ShrinkWrapImpl::run(MachineFunction &MF) {
+bool RISCVShrinkWrapImpl::run(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "**** Analysing " << MF.getName() << '\n');
 
   init(MF);
@@ -996,9 +1001,9 @@ bool ShrinkWrapImpl::run(MachineFunction &MF) {
   return Changed;
 }
 
-bool ShrinkWrapLegacy::runOnMachineFunction(MachineFunction &MF) {
+bool RISCVShrinkWrap::runOnMachineFunction(MachineFunction &MF) {
   if (skipFunction(MF.getFunction()) || MF.empty() ||
-      !ShrinkWrapImpl::isShrinkWrapEnabled(MF))
+      !RISCVShrinkWrapImpl::isShrinkWrapEnabled(MF))
     return false;
 
   const RegisterClassInfo *RCI =
@@ -1013,35 +1018,14 @@ bool ShrinkWrapLegacy::runOnMachineFunction(MachineFunction &MF) {
   MachineOptimizationRemarkEmitter *ORE =
       &getAnalysis<MachineOptimizationRemarkEmitterPass>().getORE();
 
-  return ShrinkWrapImpl(RCI, MDT, MPDT, MBFI, MLI, ORE).run(MF);
+  return RISCVShrinkWrapImpl(RCI, MDT, MPDT, MBFI, MLI, ORE).run(MF);
 }
 
-PreservedAnalyses ShrinkWrapPass::run(MachineFunction &MF,
-                                      MachineFunctionAnalysisManager &MFAM) {
-  MFPropsModifier _(*this, MF);
-  if (MF.empty() || !ShrinkWrapImpl::isShrinkWrapEnabled(MF))
-    return PreservedAnalyses::all();
-
-  const RegisterClassInfo &RCI =
-      MFAM.getResult<MachineRegisterClassAnalysis>(MF);
-  MachineDominatorTree &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
-  MachinePostDominatorTree &MPDT =
-      MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
-  MachineBlockFrequencyInfo &MBFI =
-      MFAM.getResult<MachineBlockFrequencyAnalysis>(MF);
-  MachineLoopInfo &MLI = MFAM.getResult<MachineLoopAnalysis>(MF);
-  MachineOptimizationRemarkEmitter &ORE =
-      MFAM.getResult<MachineOptimizationRemarkEmitterAnalysis>(MF);
-
-  ShrinkWrapImpl(&RCI, &MDT, &MPDT, &MBFI, &MLI, &ORE).run(MF);
-  return PreservedAnalyses::all();
-}
-
-bool ShrinkWrapImpl::isShrinkWrapEnabled(const MachineFunction &MF) {
+bool RISCVShrinkWrapImpl::isShrinkWrapEnabled(const MachineFunction &MF) {
   const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
-  switch (EnableShrinkWrapOpt) {
-  case cl::boolOrDefault::BOU_UNSET:
+  switch (MF.getSubtarget<RISCVSubtarget>().getCLOpts().enable_shrink_wrap) {
+  case BoolOrDefault::Default:
     return TFI->enableShrinkWrapping(MF) &&
            // Windows with CFI has some limitations that make it impossible
            // to use shrink-wrapping.
@@ -1055,12 +1039,12 @@ bool ShrinkWrapImpl::isShrinkWrapEnabled(const MachineFunction &MF) {
              MF.getFunction().hasFnAttribute(Attribute::SanitizeMemory) ||
              MF.getFunction().hasFnAttribute(Attribute::SanitizeType) ||
              MF.getFunction().hasFnAttribute(Attribute::SanitizeHWAddress));
-  // If EnableShrinkWrap is set, it takes precedence on whatever the
+  // If riscv-enable-shrink-wrap is set, it takes precedence on whatever the
   // target sets. The rational is that we assume we want to test
   // something related to shrink-wrapping.
-  case cl::boolOrDefault::BOU_TRUE:
+  case BoolOrDefault::True:
     return true;
-  case cl::boolOrDefault::BOU_FALSE:
+  case BoolOrDefault::False:
     return false;
   }
   llvm_unreachable("Invalid shrink-wrapping state");

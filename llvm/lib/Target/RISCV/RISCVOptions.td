@@ -69,6 +69,12 @@ defm : BoolField<"riscv-cost-per-use", "true", "">;
 defm : BoolField<"riscv-regalloc-hints", "true",
   "Enable two address hints for register allocation">;
 
+// RISCVShrinkWrap.cpp
+defm : OptionalBoolField<"riscv-enable-shrink-wrap",
+  "Enable the RISC-V shrink-wrapping pass">;
+defm : BoolField<"riscv-enable-shrink-wrap-region-split", "true",
+  "Enable splitting of the restore block if possible">;
+
 // RISCVSubtarget.cpp
 defm : BoolField<"riscv-constant-pool-for-large-ints", "true",
   "Enable using constant pool for large integers">;
@@ -107,6 +113,8 @@ defm : BoolField<"riscv-enable-sink-fold", "true",
   "Enable sinking and folding of instruction copies">;
 defm : BoolField<"riscv-select-opt", "true",
   "Enable select to branch optimizations">;
+defm : BoolField<"riscv-use-new-shrink-wrap", "false",
+  "Use the RISC-V copy of the shrink-wrapping pass instead of the generic pass">;
 defm : ValueField<"riscv-v-vector-bits-max", "std::optional<unsigned>", "std::nullopt",
   "Assume V extension vector registers are at most this big, with zero meaning no maximum size is assumed">;
 defm : ValueField<"riscv-v-vector-bits-min", "std::optional<int>", "std::nullopt",

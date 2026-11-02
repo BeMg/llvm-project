@@ -64,6 +64,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVMergeBaseOffsetLegacyPass(*PR);
   initializeRISCVOptWInstrsLegacyPass(*PR);
   initializeRISCVFoldMemOffsetLegacyPass(*PR);
+  initializeRISCVShrinkWrapPass(*PR);
   initializeRISCVExpandPseudoPreRALegacyPass(*PR);
   initializeRISCVExpandPseudoPreEmitLegacyPass(*PR);
   initializeRISCVVectorPeepholeLegacyPass(*PR);
@@ -323,6 +324,8 @@ public:
       : TargetPassConfig(TM, PM), CLOpts(TM.getCLOpts()) {
     if (TM.getOptLevel() != CodeGenOptLevel::None)
       substitutePass(&PostRASchedulerID, &PostMachineSchedulerID);
+    if (CLOpts.use_new_shrink_wrap)
+      substitutePass(&ShrinkWrapID, &RISCVShrinkWrapID);
     setEnableSinkAndFold(CLOpts.enable_sink_fold);
     EnableLoopTermFold = true;
   }

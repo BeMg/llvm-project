@@ -140,6 +140,9 @@ public:
 FunctionPass *createRISCVFoldMemOffsetLegacyPass();
 void initializeRISCVFoldMemOffsetLegacyPass(PassRegistry &);
 
+extern char &RISCVShrinkWrapID;
+void initializeRISCVShrinkWrapPass(PassRegistry &);
+
 class RISCVMergeBaseOffsetPass
     : public OptionalPassInfoMixin<RISCVMergeBaseOffsetPass> {
 public:
