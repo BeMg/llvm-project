@@ -353,6 +353,15 @@ private:
   /// Not empty, if shrink-wrapping found a better place for the epilogue.
   SaveRestorePoints RestorePoints;
 
+  /// Callee-saved registers that are saved separately from the prologue
+  /// (separate shrink-wrapping). The registers listed for a block are saved
+  /// at the start of that block.
+  SaveRestorePoints CSRSavePoints;
+  /// Callee-saved registers that are restored separately from the epilogue.
+  /// The registers listed for a block are restored before its first
+  /// terminator.
+  SaveRestorePoints CSRRestorePoints;
+
   /// Size of the UnsafeStack Frame
   uint64_t UnsafeStackSize = 0;
 
@@ -887,6 +896,21 @@ public:
 
   void clearSavePoints() { SavePoints.clear(); }
   void clearRestorePoints() { RestorePoints.clear(); }
+
+  const SaveRestorePoints &getCSRSavePoints() const { return CSRSavePoints; }
+  const SaveRestorePoints &getCSRRestorePoints() const {
+    return CSRRestorePoints;
+  }
+  void setCSRSavePoints(SaveRestorePoints NewPoints) {
+    CSRSavePoints = std::move(NewPoints);
+  }
+  void setCSRRestorePoints(SaveRestorePoints NewPoints) {
+    CSRRestorePoints = std::move(NewPoints);
+  }
+  void clearCSRSaveRestorePoints() {
+    CSRSavePoints.clear();
+    CSRRestorePoints.clear();
+  }
 
   uint64_t getUnsafeStackSize() const { return UnsafeStackSize; }
   void setUnsafeStackSize(uint64_t Size) { UnsafeStackSize = Size; }
