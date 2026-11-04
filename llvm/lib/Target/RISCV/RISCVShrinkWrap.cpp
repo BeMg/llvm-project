@@ -64,6 +64,8 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
+#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
+#include "llvm/CodeGen/MachineCycleAnalysis.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -99,6 +101,10 @@ using namespace llvm;
 
 STATISTIC(NumFunc, "Number of functions");
 STATISTIC(NumCandidates, "Number of shrink-wrapping candidates");
+STATISTIC(NumSeparateFunc,
+          "Number of functions with separately shrink-wrapped registers");
+STATISTIC(NumSeparateRegs,
+          "Number of callee-saved registers shrink-wrapped separately");
 STATISTIC(NumCandidatesDropped,
           "Number of shrink-wrapping candidates dropped because of frequency");
 
@@ -221,6 +227,17 @@ class RISCVShrinkWrapImpl {
       SmallVectorImpl<MachineBasicBlock *> &DirtyPreds,
       SmallVectorImpl<MachineBasicBlock *> &CleanPreds,
       const TargetInstrInfo *TII, RegScavenger *RS);
+
+  /// Place the save and the restore of each callee-saved register (a
+  /// "separate CSR") separately, in the region between \p Save and \p Restore.
+  /// If \p Restore is null, the region extends to the return blocks. The
+  /// result goes to the CSR save and restore points of MachineFrameInfo.
+  /// Return true if it changes the CFG.
+  bool shrinkWrapSeparately(MachineBasicBlock *Save, MachineBasicBlock *Restore,
+                            RegScavenger *RS);
+
+  /// Recompute the analyses after a change of the CFG.
+  void recomputeAnalyses();
 
   /// Initialize the pass for \p MF.
   void init(MachineFunction &MF) {
@@ -948,6 +965,659 @@ bool RISCVShrinkWrapImpl::performShrinkWrapping(
   return true;
 }
 
+/// Collect the separate CSRs: the callee-saved registers in \p SavedRegs that
+/// the target can handle separately.
+static SmallVector<MCRegister, 16>
+collectSeparateCSRs(const MachineFunction &MF,
+                    const SmallSetVector<unsigned, 16> &SavedRegs) {
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
+  SmallVector<MCRegister, 16> SepCSRs;
+  for (const MCPhysReg *CSR = MF.getRegInfo().getCalleeSavedRegs(); *CSR; ++CSR)
+    if (SavedRegs.count(*CSR) && TFI->canShrinkWrapCSRSeparately(MF, *CSR))
+      SepCSRs.push_back(*CSR);
+  return SepCSRs;
+}
+
+namespace {
+/// The region between the prologue and the epilogue.
+struct SaveRestoreRegion {
+  MachineBasicBlock *Save;
+  MachineBasicBlock *Restore;
+  BitVector InRegion;
+  SmallVector<MachineBasicBlock *, 16> Blocks;
+
+  SaveRestoreRegion(MachineBasicBlock *Save, MachineBasicBlock *Restore,
+                    unsigned NumBlocks)
+      : Save(Save), Restore(Restore), InRegion(NumBlocks) {}
+
+  bool contains(const MachineBasicBlock *MBB) const {
+    return InRegion.test(MBB->getNumber());
+  }
+  /// Return true if the edges out of MBB leave the region, i.e. go to the exit.
+  bool isExit(const MachineBasicBlock *MBB) const {
+    return Restore ? MBB == Restore : MBB->isReturnBlock();
+  }
+};
+
+/// An edge From -> To to split. The new block saves the separate CSRs in Pro
+/// and restores the separate CSRs in Epi.
+struct EdgeSplit {
+  MachineBasicBlock *From, *To;
+  BitVector Pro, Epi;
+};
+} // end anonymous namespace
+
+/// Collect the blocks of \p RegionBlocks: the blocks reachable from
+/// RegionBlocks.Save without passing through RegionBlocks.Restore. Set their
+/// bits in RegionBlocks.InRegion, and put them in RegionBlocks.Blocks in
+/// function order. Return false if RegionBlocks.Restore is not null and is not
+/// in the region.
+static bool collectRegionBlocks(MachineFunction &MF,
+                                const MachineDominatorTree &MDT,
+                                SaveRestoreRegion &RegionBlocks) {
+  MachineBasicBlock *Save = RegionBlocks.Save;
+  MachineBasicBlock *Restore = RegionBlocks.Restore;
+  BitVector &InRegion = RegionBlocks.InRegion;
+  SmallVector<MachineBasicBlock *, 16> WorkList({Save});
+  InRegion.set(Save->getNumber());
+  // DFS start from Prologue MBB
+  while (!WorkList.empty()) {
+    MachineBasicBlock *MBB = WorkList.pop_back_val();
+    assert(MDT.dominates(Save, MBB) &&
+           "Save must dominate the blocks reachable from it");
+    // No pass through Restore MBB
+    if (MBB == Restore)
+      continue;
+    for (MachineBasicBlock *Succ : MBB->successors())
+      if (!InRegion.test(Succ->getNumber())) {
+        InRegion.set(Succ->getNumber());
+        WorkList.push_back(Succ);
+      }
+  }
+  if (Restore && !InRegion.test(Restore->getNumber()))
+    return false;
+  for (MachineBasicBlock &MBB : MF)
+    if (InRegion.test(MBB.getNumber()))
+      RegionBlocks.Blocks.push_back(&MBB);
+  return true;
+}
+
+/// Return true if only the prologue in RegionBlocks.Save enters
+/// \p RegionBlocks, and only the epilogue leaves it: control enters the region
+/// only at RegionBlocks.Save, and leaves it only from the blocks for which
+/// RegionBlocks.isExit is true.
+static bool isEnclosedRegion(const SaveRestoreRegion &RegionBlocks) {
+  MachineBasicBlock *Save = RegionBlocks.Save;
+  auto IsInRegion = [&](const MachineBasicBlock *MBB) {
+    return RegionBlocks.contains(MBB);
+  };
+  for (MachineBasicBlock *MBB : RegionBlocks.Blocks) {
+    // MBB is in the middle of the region, but a block outside the region can
+    // jump to it.
+    if (MBB != Save && !all_of(MBB->predecessors(), IsInRegion))
+      return false;
+    // A block in the region can jump back to the prologue block.
+    if (MBB == Save && any_of(MBB->predecessors(), IsInRegion))
+      return false;
+    // MBB is in the middle of the region, but a successor of MBB is outside
+    // the region.
+    if (!RegionBlocks.isExit(MBB) && !all_of(MBB->successors(), IsInRegion))
+      return false;
+  }
+  return true;
+}
+
+/// Return true if \p MI uses or defines the separate CSR \p Reg.
+static bool usesSepCSR(const MachineInstr &MI, MCRegister Reg,
+                       const TargetRegisterInfo *TRI) {
+  // modifiesRegister also checks the register masks.
+  return MI.readsRegister(Reg, TRI) || MI.modifiesRegister(Reg, TRI);
+}
+
+/// Collect the separate CSRs each block in \p RegionBlocks needs: those
+/// live-in, used or defined in it. Bit C of the result for a block is set if
+/// the block needs SepCSRs[C].
+static std::vector<BitVector>
+collectSepCSRNeeds(ArrayRef<MachineBasicBlock *> RegionBlocks,
+                   ArrayRef<MCRegister> SepCSRs, unsigned NumBlocks,
+                   const TargetRegisterInfo *TRI) {
+  unsigned NumSepCSRs = SepCSRs.size();
+  std::vector<BitVector> SepCSRNeeds(NumBlocks, BitVector(NumSepCSRs));
+  for (MachineBasicBlock *MBB : RegionBlocks) {
+    BitVector &SepCSRNeed = SepCSRNeeds[MBB->getNumber()];
+    for (unsigned SepCSRIndex = 0; SepCSRIndex != NumSepCSRs; ++SepCSRIndex) {
+      MCRegister Reg = SepCSRs[SepCSRIndex];
+      if (any_of(MBB->liveins(),
+                 [&](const MachineBasicBlock::RegisterMaskPair &LI) {
+                   return TRI->regsOverlap(LI.PhysReg, Reg);
+                 }) ||
+          any_of(*MBB, [&](const MachineInstr &MI) {
+            return !MI.isDebugInstr() && usesSepCSR(MI, Reg, TRI);
+          }))
+        SepCSRNeed.set(SepCSRIndex);
+    }
+    // Blocks without successors that are not returns need all separate CSRs.
+    // BranchFolder runs after PEI, and can merge the common tails of such
+    // blocks from different paths. The merged tail has one CFI state, so all
+    // paths to it must save the same separate CSRs. A block that uses a
+    // separate CSR must save it, so the only state that works for all such
+    // blocks is all separate CSRs saved.
+    if (MBB->succ_empty() && !MBB->isReturnBlock())
+      SepCSRNeed.set();
+  }
+  return SepCSRNeeds;
+}
+
+/// Return true if \p MF has unusual control flow or frames that separate
+/// shrink wrapping does not handle.
+static bool hasUnsupportedControlFlowOrFrame(const MachineFunction &MF) {
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  return MFI.hasVarSizedObjects() || MF.exposesReturnsTwice() ||
+         MF.callsEHReturn() || MF.callsUnwindInit() || MF.hasEHFunclets() ||
+         any_of(MF, [](const MachineBasicBlock &MBB) {
+           return MBB.isEHPad() || MBB.isInlineAsmBrIndirectTarget();
+         });
+}
+
+/// Compute the cost of placing a save at the start of each block in
+/// \p RegionBlocks, which is its frequency without the frequency from back
+/// edges. The saves of a loop header go on its entry edges, which are split if
+/// necessary. BlockFrequency arithmetic saturates.
+static DenseMap<const MachineBasicBlock *, BlockFrequency>
+computeBlockCosts(ArrayRef<MachineBasicBlock *> RegionBlocks,
+                  const MachineBlockFrequencyInfo &MBFI,
+                  const MachineDominatorTree &MDT) {
+  DenseMap<const MachineBasicBlock *, BlockFrequency> BlockCosts;
+  for (MachineBasicBlock *MBB : RegionBlocks) {
+    BlockFrequency Cost = MBFI.getBlockFreq(MBB);
+    for (MachineBasicBlock *Pred : MBB->predecessors())
+      if (MDT.dominates(MBB, Pred))
+        Cost -= MBFI.getBlockFreq(Pred) *
+                MBFI.getMBPI()->getEdgeProbability(Pred, MBB);
+    BlockCosts[MBB] = Cost;
+  }
+  return BlockCosts;
+}
+
+/// Place the saves of each separate CSR: walk the dominator tree from
+/// RegionBlocks.Save, and mark a block as having the separate CSR if it needs
+/// it, or if this is cheaper than placing the saves in all its dominator
+/// subtrees. Bit C of the result for a block is set if the block has
+/// SepCSRs[C].
+static std::vector<BitVector> placeSepCSRs(
+    const SaveRestoreRegion &RegionBlocks, ArrayRef<BitVector> SepCSRNeeds,
+    const DenseMap<const MachineBasicBlock *, BlockFrequency> &BlockCosts,
+    unsigned NumSepCSRs, const MachineDominatorTree &MDT,
+    const MachinePostDominatorTree &MPDT) {
+  std::vector<BitVector> HasCSRinBlock(SepCSRNeeds.size(),
+                                       BitVector(NumSepCSRs));
+  struct Frame {
+    MachineDomTreeNode *Node;
+    MachineDomTreeNode::iterator NextChild;
+    BlockFrequency TotalCost;
+  };
+  MachineDomTreeNode *SaveNode = MDT.getNode(RegionBlocks.Save);
+  for (unsigned SepCSRIndex = 0; SepCSRIndex != NumSepCSRs; ++SepCSRIndex) {
+    SmallVector<Frame, 16> Stack({{SaveNode, SaveNode->begin(), {}}});
+    while (true) {
+      Frame &F = Stack.back();
+      MachineBasicBlock *MBB = F.Node->getBlock();
+      BlockFrequency CurrBlockCost = BlockCosts.lookup(MBB);
+      bool NeedCSR = SepCSRNeeds[MBB->getNumber()].test(SepCSRIndex);
+      // Visit the children unless the block needs the separate CSR itself, or
+      // they already cost more than this block.
+      if (!NeedCSR && F.NextChild != F.Node->end() &&
+          F.TotalCost <= CurrBlockCost) {
+        MachineDomTreeNode *Child = *F.NextChild++;
+        if (RegionBlocks.contains(Child->getBlock()))
+          Stack.push_back({Child, Child->begin(), {}});
+        continue;
+      }
+
+      bool ShouldHasCSR = NeedCSR || F.TotalCost > CurrBlockCost;
+      if (!ShouldHasCSR) {
+        // If this block's immediate post-dominator is dominated by it, and
+        // has the separate CSR, place it here as well: earlier is better.
+        MachineDomTreeNode *PDNode = MPDT.getNode(MBB);
+        MachineDomTreeNode *IPDom = PDNode ? PDNode->getIDom() : nullptr;
+        MachineBasicBlock *Kid = IPDom ? IPDom->getBlock() : nullptr;
+        ShouldHasCSR = Kid && RegionBlocks.contains(Kid) &&
+                       MDT.dominates(MBB, Kid) &&
+                       HasCSRinBlock[Kid->getNumber()].test(SepCSRIndex);
+      }
+      if (ShouldHasCSR) {
+        F.TotalCost = CurrBlockCost;
+        HasCSRinBlock[MBB->getNumber()].set(SepCSRIndex);
+      }
+
+      BlockFrequency Total = F.TotalCost;
+      Stack.pop_back();
+      if (Stack.empty())
+        break;
+      Stack.back().TotalCost += Total;
+    }
+  }
+  return HasCSRinBlock;
+}
+
+/// Build Head for the separate CSRs: bit C of Head[Block] is set if a path
+/// from RegionBlocks.Save to Block does not have SepCSRs[C], according to
+/// \p HasCSRinBlock.
+static void buildHead(const SaveRestoreRegion &RegionBlocks,
+                      ArrayRef<BitVector> HasCSRinBlock,
+                      std::vector<BitVector> &Head) {
+  MachineBasicBlock *Save = RegionBlocks.Save;
+  for (MachineBasicBlock *MBB : RegionBlocks.Blocks)
+    Head[MBB->getNumber()].reset();
+  unsigned SaveNum = Save->getNumber();
+  // Init for all CSRs
+  Head[SaveNum].set();
+  // Unmark if the Save block has the CSR
+  Head[SaveNum].reset(HasCSRinBlock[SaveNum]);
+  SmallSetVector<MachineBasicBlock *, 16> WorkList;
+  for (MachineBasicBlock *Succ : Save->successors())
+    if (RegionBlocks.contains(Succ))
+      WorkList.insert(Succ);
+  while (!WorkList.empty()) {
+    MachineBasicBlock *MBB = WorkList.pop_back_val();
+    BitVector &CurrH = Head[MBB->getNumber()];
+    BitVector OldH = CurrH;
+    // If Pred be marked with Head,
+    // it mean there is a path from Save to MBB with no CSRs Save
+    for (MachineBasicBlock *Pred : MBB->predecessors()) {
+      assert(RegionBlocks.contains(Pred) &&
+             "isEnclosedRegion: only Save has predecessors outside");
+      CurrH |= Head[Pred->getNumber()];
+    }
+    // Unmark if the MBB has the CSR
+    CurrH.reset(HasCSRinBlock[MBB->getNumber()]);
+    if (CurrH != OldH)
+      for (MachineBasicBlock *Succ : MBB->successors())
+        if (RegionBlocks.contains(Succ))
+          WorkList.insert(Succ);
+  }
+}
+
+/// Build Tail for the separate CSRs: bit C of Tail[Block] is set if a path
+/// from Block to an exit of \p RegionBlocks does not have SepCSRs[C],
+/// according to \p HasCSRinBlock. Blocks that cannot reach an exit have all
+/// bits set.
+static void buildTail(const SaveRestoreRegion &RegionBlocks,
+                      ArrayRef<BitVector> HasCSRinBlock,
+                      std::vector<BitVector> &Tail) {
+  // If the block can't reach the exits, mark it as all.
+  // Mark all block as all.
+  for (MachineBasicBlock *MBB : RegionBlocks.Blocks)
+    Tail[MBB->getNumber()].set();
+  SmallVector<MachineBasicBlock *, 16> Exits;
+  for (MachineBasicBlock *MBB : RegionBlocks.Blocks)
+    if (RegionBlocks.isExit(MBB))
+      Exits.push_back(MBB);
+  // Reset for block can reach the exits.
+  {
+    SmallPtrSet<MachineBasicBlock *, 16> ReachesExit;
+    SmallVector<MachineBasicBlock *, 16> Stack(Exits);
+    while (!Stack.empty()) {
+      MachineBasicBlock *MBB = Stack.pop_back_val();
+      if (!ReachesExit.insert(MBB).second)
+        continue;
+      Tail[MBB->getNumber()].reset();
+      for (MachineBasicBlock *Pred : MBB->predecessors())
+        if (RegionBlocks.contains(Pred))
+          Stack.push_back(Pred);
+    }
+  }
+  SmallSetVector<MachineBasicBlock *, 16> WorkList;
+  // Init the Exit block.
+  for (MachineBasicBlock *MBB : Exits) {
+    Tail[MBB->getNumber()].set();
+    Tail[MBB->getNumber()].reset(HasCSRinBlock[MBB->getNumber()]);
+    for (MachineBasicBlock *Pred : MBB->predecessors())
+      if (RegionBlocks.contains(Pred))
+        WorkList.insert(Pred);
+  }
+  while (!WorkList.empty()) {
+    MachineBasicBlock *MBB = WorkList.pop_back_val();
+    // The Tail of an exit does not depend on its successors.
+    if (RegionBlocks.isExit(MBB))
+      continue;
+    BitVector &CurrT = Tail[MBB->getNumber()];
+    BitVector OldT = CurrT;
+    for (MachineBasicBlock *Succ : MBB->successors()) {
+      assert(RegionBlocks.contains(Succ) &&
+             "isEnclosedRegion: only exits have successors outside");
+      CurrT |= Tail[Succ->getNumber()];
+    }
+    CurrT.reset(HasCSRinBlock[MBB->getNumber()]);
+    if (CurrT != OldT)
+      for (MachineBasicBlock *Pred : MBB->predecessors())
+        if (RegionBlocks.contains(Pred))
+          WorkList.insert(Pred);
+  }
+}
+
+/// Extend the separate CSRs to every block where they are already present on
+/// all paths from the region entry, or on all paths to the region exit. This
+/// does not add saves or restores on any path, but may remove some. Repeat
+/// until nothing changes.
+///
+/// Head[Block][CSRIndex]: Save -> Block has at least one path without the CSR
+/// Tail[Block][CSRIndex]: Block -> Exit has at least one path without the CSR
+/// When Head[Block][CSRIndex] && Tail[Block][CSRIndex], mark the Block will
+/// cause new save/restore. It mean we has one Save -> Exit path without the CSR
+/// but try to add save/restore for it.
+static void spreadSepCSRs(const SaveRestoreRegion &RegionBlocks,
+                          unsigned NumSepCSRs,
+                          std::vector<BitVector> &HasCSRinBlock) {
+  unsigned NumBlocks = HasCSRinBlock.size();
+  std::vector<BitVector> Head(NumBlocks, BitVector(NumSepCSRs));
+  std::vector<BitVector> Tail(NumBlocks, BitVector(NumSepCSRs));
+  bool Changed;
+  do {
+    buildHead(RegionBlocks, HasCSRinBlock, Head);
+    buildTail(RegionBlocks, HasCSRinBlock, Tail);
+
+    // A block has a separate CSR unless it is missing both on some path from
+    // the entry and on some path to the exit.
+    Changed = false;
+    for (MachineBasicBlock *MBB : RegionBlocks.Blocks) {
+      // ~(Head && Tail) is 0 mean no save/restore need for MBB
+      BitVector NewHas = Head[MBB->getNumber()];
+      NewHas &= Tail[MBB->getNumber()];
+      NewHas.flip();
+      if (NewHas != HasCSRinBlock[MBB->getNumber()]) {
+        HasCSRinBlock[MBB->getNumber()] = NewHas;
+        Changed = true;
+      }
+    }
+  } while (Changed);
+}
+
+/// Compute the separate CSRs to save at the start of each block in
+/// \p RegionBlocks (ProHead) and to restore at the end of it (EpiTail).
+/// Only the separate CSRs set in \p Active are considered.
+static void computeProHeadEpiTail(const SaveRestoreRegion &RegionBlocks,
+                                  ArrayRef<BitVector> HasCSRinBlock,
+                                  const BitVector &Active,
+                                  ArrayRef<MCRegister> SepCSRs,
+                                  const TargetRegisterInfo *TRI,
+                                  std::vector<BitVector> &ProHead,
+                                  std::vector<BitVector> &EpiTail) {
+  auto TerminatorsUse = [&](MachineBasicBlock *MBB, unsigned SepCSRsIndex) {
+    return any_of(MBB->terminators(), [&](const MachineInstr &MI) {
+      return usesSepCSR(MI, SepCSRs[SepCSRsIndex], TRI);
+    });
+  };
+  // Not has -> has: Save
+  // Has -> not has: Restore
+  for (MachineBasicBlock *MBB : RegionBlocks.Blocks) {
+    // ProHead: CSRs save in the begin of MBB
+    const BitVector &CurrHasCSRs = HasCSRinBlock[MBB->getNumber()];
+    BitVector &Pro = ProHead[MBB->getNumber()];
+    Pro = CurrHasCSRs;
+    Pro &= Active;
+    // At least one of Pred already Save.
+    for (MachineBasicBlock *Pred : MBB->predecessors())
+      Pro.reset(HasCSRinBlock[Pred->getNumber()]);
+
+    // EpiTail: CSRs restore in the end of MBB
+    BitVector &Epi = EpiTail[MBB->getNumber()];
+    Epi = CurrHasCSRs;
+    Epi &= Active;
+    // noreturn
+    if (MBB->succ_empty() && !RegionBlocks.isExit(MBB))
+      Epi.reset();
+    // At least one of Succ has the CSRs.
+    if (!RegionBlocks.isExit(MBB))
+      for (MachineBasicBlock *Succ : MBB->successors())
+        Epi.reset(HasCSRinBlock[Succ->getNumber()]);
+    // Exclude the terminator use the CSRs.
+    for (unsigned SepCSRsIndex : Epi.set_bits())
+      if (TerminatorsUse(MBB, SepCSRsIndex))
+        Epi.reset(SepCSRsIndex);
+  }
+}
+
+/// Reset the separate CSRs in \p Active that need a save or a restore on an
+/// edge in \p RegionBlocks that cannot be split.
+static void disqualifyUnsplittableEdges(const SaveRestoreRegion &RegionBlocks,
+                                        ArrayRef<BitVector> HasCSRinBlock,
+                                        ArrayRef<BitVector> ProHead,
+                                        ArrayRef<BitVector> EpiTail,
+                                        BitVector &Active) {
+  for (MachineBasicBlock *MBB : RegionBlocks.Blocks) {
+    const BitVector &H = HasCSRinBlock[MBB->getNumber()];
+    for (MachineBasicBlock *Succ : MBB->successors()) {
+      const BitVector &SH = HasCSRinBlock[Succ->getNumber()];
+      BitVector Pro = SH, Epi = H;
+      // Pro = SH & ~H & ~ProHead[Succ]
+      // CurrMBB not has -> SuccMBB has and
+      // SuccMBB can't save in Begin of SuccMBB
+      Pro.reset(H);
+      Pro.reset(ProHead[Succ->getNumber()]);
+      // Epi = H & ~SH & ~EpiTail[MBB]
+      // CurrMBB has -> SuccMBB not has and
+      // CurrMBB can't restore in end of CurrMBB
+      Epi.reset(SH);
+      Epi.reset(EpiTail[MBB->getNumber()]);
+      Pro |= Epi;
+      Pro &= Active;
+      if (Pro.any() && !MBB->canSplitCriticalEdge(Succ)) {
+        LLVM_DEBUG(dbgs() << "Cannot split edge " << printMBBReference(*MBB)
+                          << " -> " << printMBBReference(*Succ) << '\n');
+        Active.reset(Pro);
+      }
+    }
+  }
+}
+
+/// Reset the separate CSRs in \p Active that have saves in \p ProHead but no
+/// restores in \p EpiTail.
+/// TODO: Do not force the saves and the restores to be paired. A path that
+/// does not return needs no restore, so PEI could accept saves without
+/// restores, and these separate CSRs would not need the prologue.
+static void disqualifyUnrestoredSaves(const SaveRestoreRegion &RegionBlocks,
+                                      ArrayRef<BitVector> ProHead,
+                                      ArrayRef<BitVector> EpiTail,
+                                      BitVector &Active) {
+  BitVector Unrestored(Active.size()), Restored(Active.size());
+  for (MachineBasicBlock *MBB : RegionBlocks.Blocks) {
+    Unrestored |= ProHead[MBB->getNumber()];
+    Restored |= EpiTail[MBB->getNumber()];
+  }
+  Unrestored.reset(Restored);
+  Active.reset(Unrestored);
+}
+
+/// Return the separate CSRs to save and restore separately (Active). The
+/// other separate CSRs are saved in the prologue and restored in the epilogue.
+/// Also compute \p ProHead and \p EpiTail for the active separate CSRs. If no
+/// separate CSR is active, \p ProHead and \p EpiTail are not valid.
+static BitVector computeActiveSepCSRs(const SaveRestoreRegion &RegionBlocks,
+                                      ArrayRef<BitVector> HasCSRinBlock,
+                                      ArrayRef<MCRegister> SepCSRs,
+                                      const TargetRegisterInfo *TRI,
+                                      std::vector<BitVector> &ProHead,
+                                      std::vector<BitVector> &EpiTail) {
+  unsigned NumSepCSRs = SepCSRs.size();
+  // Active is true mean this CSR try to save/restore separately.
+  // Active is false then save/restore in the prologue/epilogue.
+  // Default all true.
+  BitVector Active(NumSepCSRs, true);
+  // Reset due to must put in prologue
+  Active.reset(HasCSRinBlock[RegionBlocks.Save->getNumber()]);
+
+  computeProHeadEpiTail(RegionBlocks, HasCSRinBlock, Active, SepCSRs, TRI,
+                        ProHead, EpiTail);
+  disqualifyUnsplittableEdges(RegionBlocks, HasCSRinBlock, ProHead, EpiTail,
+                              Active);
+  disqualifyUnrestoredSaves(RegionBlocks, ProHead, EpiTail, Active);
+  if (Active.none())
+    return Active;
+  // Active change, update ProHead and EpiTail.
+  computeProHeadEpiTail(RegionBlocks, HasCSRinBlock, Active, SepCSRs, TRI,
+                        ProHead, EpiTail);
+  return Active;
+}
+
+/// Add a point at \p MBB to \p Points for each separate CSR set in \p Comps.
+static void addPoints(SaveRestorePoints &Points, MachineBasicBlock *MBB,
+                      const BitVector &Comps, ArrayRef<MCRegister> SepCSRs) {
+  for (unsigned C : Comps.set_bits())
+    Points[MBB].push_back(CalleeSavedInfo(SepCSRs[C]));
+}
+
+/// Add the saves in \p ProHead to \p CSRSaves and the restores in \p EpiTail
+/// to \p CSRRestores. Collect in \p EdgeSplits the edges in \p RegionBlocks
+/// that need a save or a restore of an active separate CSR.
+static void collectSaveRestorePoints(
+    const SaveRestoreRegion &RegionBlocks, ArrayRef<BitVector> HasCSRinBlock,
+    ArrayRef<BitVector> ProHead, ArrayRef<BitVector> EpiTail,
+    const BitVector &Active, ArrayRef<MCRegister> SepCSRs,
+    SaveRestorePoints &CSRSaves, SaveRestorePoints &CSRRestores,
+    SmallVectorImpl<EdgeSplit> &EdgeSplits) {
+  for (MachineBasicBlock *MBB : RegionBlocks.Blocks) {
+    addPoints(CSRSaves, MBB, ProHead[MBB->getNumber()], SepCSRs);
+    addPoints(CSRRestores, MBB, EpiTail[MBB->getNumber()], SepCSRs);
+
+    // Find the splitting edge candidate
+    if (RegionBlocks.isExit(MBB))
+      continue;
+    const BitVector &H = HasCSRinBlock[MBB->getNumber()];
+    for (MachineBasicBlock *Succ : MBB->successors()) {
+      const BitVector &SH = HasCSRinBlock[Succ->getNumber()];
+      BitVector Pro = SH, Epi = H;
+      // Pro = SH & ~H & ~ProHead[Succ]
+      // CurrMBB not has -> SuccMBB has and
+      // SuccMBB can't save in Begin of SuccMBB
+      Pro.reset(H);
+      Pro.reset(ProHead[Succ->getNumber()]);
+      Pro &= Active;
+      // Epi = H & ~SH & ~EpiTail[MBB]
+      // CurrMBB has -> SuccMBB not has and
+      // CurrMBB can't restore in end of CurrMBB
+      Epi.reset(SH);
+      Epi.reset(EpiTail[MBB->getNumber()]);
+      Epi &= Active;
+      if (Pro.any() || Epi.any())
+        EdgeSplits.push_back({MBB, Succ, Pro, Epi});
+    }
+  }
+}
+
+/// Split each edge in \p EdgeSplits. Add the saves of the new block to
+/// \p CSRSaves and the restores of the new block to \p CSRRestores.
+static void splitEdges(ArrayRef<EdgeSplit> EdgeSplits,
+                       ArrayRef<MCRegister> SepCSRs,
+                       SaveRestorePoints &CSRSaves,
+                       SaveRestorePoints &CSRRestores) {
+  for (const EdgeSplit &E : EdgeSplits) {
+    MachineBasicBlock *NMBB = E.From->SplitCriticalEdge(
+        E.To,
+        MachineBasicBlock::SplitCriticalEdgeAnalyses{nullptr, nullptr, nullptr},
+        /*MDTU=*/nullptr);
+    assert(NMBB && "Checked that the edge can be split");
+    LLVM_DEBUG(dbgs() << "Split edge " << printMBBReference(*E.From) << " -> "
+                      << printMBBReference(*E.To) << " with "
+                      << printMBBReference(*NMBB) << '\n');
+    addPoints(CSRSaves, NMBB, E.Pro, SepCSRs);
+    addPoints(CSRRestores, NMBB, E.Epi, SepCSRs);
+  }
+}
+
+bool RISCVShrinkWrapImpl::shrinkWrapSeparately(MachineBasicBlock *Save,
+                                               MachineBasicBlock *Restore,
+                                               RegScavenger *RS) {
+  MachineFunction *MF = MachineFunc;
+  const RISCVFrameLowering *TFI =
+      MF->getSubtarget<RISCVSubtarget>().getFrameLowering();
+  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
+  if (!MF->getSubtarget<RISCVSubtarget>().getCLOpts().shrink_wrap_separate ||
+      !TFI->enableSeparateCSRShrinkWrapping(*MF))
+    return false;
+
+  if (hasUnsupportedControlFlowOrFrame(*MF))
+    return false;
+
+  SmallVector<MCRegister, 16> SepCSRs =
+      collectSeparateCSRs(*MF, getCurrentCSRs(RS));
+
+  if (SepCSRs.empty())
+    return false;
+
+  // The region between the prologue and the epilogue.
+  unsigned NumBlocks = MF->getNumBlockIDs();
+  SaveRestoreRegion RegionBlocks(Save, Restore, NumBlocks);
+  if (!collectRegionBlocks(*MF, *MDT, RegionBlocks))
+    return false;
+
+  // Make sure the Region is valid for separate shrink wrap.
+  if (!isEnclosedRegion(RegionBlocks))
+    return false;
+
+  // The separate CSRs each block needs.
+  std::vector<BitVector> SepCSRNeeds =
+      collectSepCSRNeeds(RegionBlocks.Blocks, SepCSRs, NumBlocks, TRI);
+
+  DenseMap<const MachineBasicBlock *, BlockFrequency> BlockCosts =
+      computeBlockCosts(RegionBlocks.Blocks, *MBFI, *MDT);
+
+  // The separate CSRs each block has.
+  unsigned NumSepCSRs = SepCSRs.size();
+  std::vector<BitVector> HasCSRinBlock = placeSepCSRs(
+      RegionBlocks, SepCSRNeeds, BlockCosts, NumSepCSRs, *MDT, *MPDT);
+
+  spreadSepCSRs(RegionBlocks, NumSepCSRs, HasCSRinBlock);
+
+  LLVM_DEBUG({
+    for (MachineBasicBlock *MBB : RegionBlocks.Blocks) {
+      dbgs() << printMBBReference(*MBB) << " has";
+      for (unsigned C : HasCSRinBlock[MBB->getNumber()].set_bits())
+        dbgs() << ' ' << printReg(SepCSRs[C], TRI);
+      dbgs() << '\n';
+    }
+  });
+
+  std::vector<BitVector> ProHead(NumBlocks, BitVector(NumSepCSRs));
+  std::vector<BitVector> EpiTail(NumBlocks, BitVector(NumSepCSRs));
+  BitVector Active = computeActiveSepCSRs(RegionBlocks, HasCSRinBlock, SepCSRs,
+                                          TRI, ProHead, EpiTail);
+  if (Active.none())
+    return false;
+
+  SaveRestorePoints CSRSaves, CSRRestores;
+  SmallVector<EdgeSplit, 4> EdgeSplits;
+  collectSaveRestorePoints(RegionBlocks, HasCSRinBlock, ProHead, EpiTail,
+                           Active, SepCSRs, CSRSaves, CSRRestores, EdgeSplits);
+
+  splitEdges(EdgeSplits, SepCSRs, CSRSaves, CSRRestores);
+  // The pass preserves all analyses.
+  if (!EdgeSplits.empty())
+    recomputeAnalyses();
+
+  LLVM_DEBUG({
+    dbgs() << "Separately shrink-wrapped:";
+    for (unsigned C : Active.set_bits())
+      dbgs() << ' ' << printReg(SepCSRs[C], TRI);
+    dbgs() << '\n';
+  });
+  MachineFrameInfo &MFI = MF->getFrameInfo();
+  MFI.setCSRSavePoints(std::move(CSRSaves));
+  MFI.setCSRRestorePoints(std::move(CSRRestores));
+  ++NumSeparateFunc;
+  NumSeparateRegs += Active.count();
+  return !EdgeSplits.empty();
+}
+
+void RISCVShrinkWrapImpl::recomputeAnalyses() {
+  MDT->recalculate(*MachineFunc);
+  MPDT->recalculate(*MachineFunc);
+  MLI->calculate(*MDT);
+  MachineCycleInfo MCI;
+  MCI.compute(*MachineFunc);
+  MBFI->calculate(*MachineFunc, *MBFI->getMBPI(), MCI);
+}
+
 bool RISCVShrinkWrapImpl::run(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "**** Analysing " << MF.getName() << '\n');
 
@@ -979,10 +1649,26 @@ bool RISCVShrinkWrapImpl::run(MachineFunction &MF) {
   bool HasCandidate = performShrinkWrapping(RPOT, RS.get());
   StackAddressUsedBlockInfo.clear();
   Changed = postShrinkWrapping(HasCandidate, MF, RS.get());
+
+  // The region of the frame, where PEI puts the prologue and the epilogue. The
+  // code below sets the save and restore points under the same condition.
+  // Without them, the prologue goes in the entry block, and the epilogue in
+  // the return blocks.
+  MachineBasicBlock *RegionSave = &MF.front();
+  MachineBasicBlock *RegionRestore = nullptr;
+  if ((HasCandidate || Changed) && ArePointsInteresting()) {
+    RegionSave = Save;
+    // A restore point that does not return has no epilogue, so the region of
+    // the frame extends to all blocks after the prologue.
+    if (!Restore->succ_empty() || Restore->isReturnBlock())
+      RegionRestore = Restore;
+  }
+  bool SplitEdges = shrinkWrapSeparately(RegionSave, RegionRestore, RS.get());
+
   if (!HasCandidate && !Changed)
-    return false;
+    return SplitEdges;
   if (!ArePointsInteresting())
-    return Changed;
+    return Changed || SplitEdges;
 
   LLVM_DEBUG(dbgs() << "Final shrink wrap candidates:\nSave: "
                     << printMBBReference(*Save) << ' '
@@ -998,7 +1684,7 @@ bool RISCVShrinkWrapImpl::run(MachineFunction &MF) {
   MFI.setSavePoints(SavePoints);
   MFI.setRestorePoints(RestorePoints);
   ++NumCandidates;
-  return Changed;
+  return Changed || SplitEdges;
 }
 
 bool RISCVShrinkWrap::runOnMachineFunction(MachineFunction &MF) {

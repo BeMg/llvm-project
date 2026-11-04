@@ -337,7 +337,6 @@ define dso_local signext range(i32 0, 2) i32 @is_ready(ptr nofree noundef readon
 ; CHECK-NEXT:    addi sp, sp, -32
 ; CHECK-NEXT:    sd ra, 24(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    sd s0, 16(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    lw a2, 232(a0)
 ; CHECK-NEXT:    li s0, 1
 ; CHECK-NEXT:    beqz a2, .LBB3_3
@@ -352,6 +351,7 @@ define dso_local signext range(i32 0, 2) i32 @is_ready(ptr nofree noundef readon
 ; CHECK-NEXT:    ld a3, 224(a0)
 ; CHECK-NEXT:    beq a2, a3, .LBB3_7
 ; CHECK-NEXT:  # %bb.4: # %if.end
+; CHECK-NEXT:    sd s1, 8(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    ld a2, 16(a2)
 ; CHECK-NEXT:    sltu s1, a1, a2
 ; CHECK-NEXT:    or a1, s1, s0
@@ -364,13 +364,13 @@ define dso_local signext range(i32 0, 2) i32 @is_ready(ptr nofree noundef readon
 ; CHECK-NEXT:  .LBB3_6: # %if.end10
 ; CHECK-NEXT:    not a0, s1
 ; CHECK-NEXT:    and a0, s0, a0
+; CHECK-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    j .LBB3_8
 ; CHECK-NEXT:  .LBB3_7:
 ; CHECK-NEXT:    li a0, 0
 ; CHECK-NEXT:  .LBB3_8: # %cleanup
 ; CHECK-NEXT:    ld ra, 24(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s0, 16(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s1, 8(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    addi sp, sp, 32
 ; CHECK-NEXT:    ret
 entry:
@@ -432,26 +432,22 @@ define dso_local i64 @dot(ptr noundef %a, ptr noundef %b, i64 noundef %n) local_
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    addi sp, sp, -80
 ; CHECK-NEXT:    sd ra, 72(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s0, 64(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s2, 48(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    sd s3, 40(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s4, 32(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s5, 24(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s6, 16(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s7, 8(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s8, 0(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    ld s3, 0(a0)
 ; CHECK-NEXT:    li a3, 2
 ; CHECK-NEXT:    beq a2, a3, .LBB4_3
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    li a3, 1
-; CHECK-NEXT:    bne a2, a3, .LBB4_5
+; CHECK-NEXT:    bne a2, a3, .LBB4_4
 ; CHECK-NEXT:  # %bb.2: # %sw.bb
 ; CHECK-NEXT:    ld a0, 0(a1)
 ; CHECK-NEXT:    mul a0, a0, s3
-; CHECK-NEXT:    j .LBB4_4
+; CHECK-NEXT:    call reduce
+; CHECK-NEXT:    addi a0, a0, 1
+; CHECK-NEXT:    j .LBB4_5
 ; CHECK-NEXT:  .LBB4_3: # %sw.bb2
+; CHECK-NEXT:    sd s0, 64(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    ld a2, 0(a1)
 ; CHECK-NEXT:    mul a2, a2, s3
 ; CHECK-NEXT:    mv s0, a0
@@ -462,11 +458,20 @@ define dso_local i64 @dot(ptr noundef %a, ptr noundef %b, i64 noundef %n) local_
 ; CHECK-NEXT:    ld a2, 8(s1)
 ; CHECK-NEXT:    mul a1, a2, a1
 ; CHECK-NEXT:    add a0, a1, a0
-; CHECK-NEXT:  .LBB4_4: # %return
 ; CHECK-NEXT:    call reduce
 ; CHECK-NEXT:    addi a0, a0, 1
-; CHECK-NEXT:    j .LBB4_6
-; CHECK-NEXT:  .LBB4_5: # %sw.default
+; CHECK-NEXT:    ld s0, 64(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s1, 56(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    j .LBB4_5
+; CHECK-NEXT:  .LBB4_4: # %sw.default
+; CHECK-NEXT:    sd s0, 64(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s1, 56(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s2, 48(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s4, 32(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s5, 24(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s6, 16(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s7, 8(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s8, 0(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    ld s4, 8(a0)
 ; CHECK-NEXT:    ld s5, 16(a0)
 ; CHECK-NEXT:    ld s6, 24(a0)
@@ -494,17 +499,17 @@ define dso_local i64 @dot(ptr noundef %a, ptr noundef %b, i64 noundef %n) local_
 ; CHECK-NEXT:    add s0, s0, s1
 ; CHECK-NEXT:    add a0, s2, a0
 ; CHECK-NEXT:    add a0, s0, a0
-; CHECK-NEXT:  .LBB4_6: # %return
-; CHECK-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s0, 64(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s1, 56(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s2, 48(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s3, 40(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s4, 32(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s5, 24(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s6, 16(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s7, 8(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s8, 0(sp) # 8-byte Folded Reload
+; CHECK-NEXT:  .LBB4_5: # %return
+; CHECK-NEXT:    ld ra, 72(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s3, 40(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    addi sp, sp, 80
 ; CHECK-NEXT:    ret
 entry:
@@ -581,11 +586,6 @@ define dso_local signext range(i32 0, 2) i32 @legal(ptr noundef %p, i32 noundef 
 ; CHECK-NEXT:    sd ra, 56(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    sd s0, 48(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    sd s1, 40(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s2, 32(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s3, 24(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s4, 16(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s5, 8(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s6, 0(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    mv s0, a0
 ; CHECK-NEXT:    lui a2, 12
 ; CHECK-NEXT:    slli s1, a1, 52
@@ -597,6 +597,11 @@ define dso_local signext range(i32 0, 2) i32 @legal(ptr noundef %p, i32 noundef 
 ; CHECK-NEXT:    lui a2, 8
 ; CHECK-NEXT:    bne a0, a2, .LBB5_5
 ; CHECK-NEXT:  # %bb.2: # %if.then
+; CHECK-NEXT:    sd s2, 32(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s3, 24(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s4, 16(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s5, 8(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s6, 0(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    ld s3, 0(s0)
 ; CHECK-NEXT:    ld s4, 8(s0)
 ; CHECK-NEXT:    ld s5, 16(s0)
@@ -616,7 +621,13 @@ define dso_local signext range(i32 0, 2) i32 @legal(ptr noundef %p, i32 noundef 
 ; CHECK-NEXT:    or a0, a0, s1
 ; CHECK-NEXT:    or a1, a1, a2
 ; CHECK-NEXT:    and a0, a0, a1
-; CHECK-NEXT:    j .LBB5_7
+; CHECK-NEXT:    seqz a0, a0
+; CHECK-NEXT:    ld s2, 32(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s3, 24(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s4, 16(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s5, 8(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s6, 0(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    j .LBB5_8
 ; CHECK-NEXT:  .LBB5_3: # %if.then16
 ; CHECK-NEXT:    lw a0, 64(s0)
 ; CHECK-NEXT:    slli a0, a0, 3
@@ -649,11 +660,6 @@ define dso_local signext range(i32 0, 2) i32 @legal(ptr noundef %p, i32 noundef 
 ; CHECK-NEXT:    ld ra, 56(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s0, 48(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s1, 40(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s2, 32(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s3, 24(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s4, 16(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s5, 8(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s6, 0(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    addi sp, sp, 64
 ; CHECK-NEXT:    ret
 entry:
@@ -731,9 +737,6 @@ define dso_local signext range(i32 -1, -2147483648) i32 @multi_compare(ptr nound
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    addi sp, sp, -64
 ; CHECK-NEXT:    sd ra, 56(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s0, 48(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s1, 40(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s2, 32(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    sd s3, 24(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    sd s4, 16(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    sd s5, 8(sp) # 8-byte Folded Spill
@@ -743,15 +746,18 @@ define dso_local signext range(i32 -1, -2147483648) i32 @multi_compare(ptr nound
 ; CHECK-NEXT:    li s5, 32
 ; CHECK-NEXT:    li s6, 124
 ; CHECK-NEXT:    lbu a3, 0(a1)
-; CHECK-NEXT:    bne a3, s4, .LBB6_5
+; CHECK-NEXT:    bne a3, s4, .LBB6_6
 ; CHECK-NEXT:  .LBB6_1: # %if.then
 ; CHECK-NEXT:    lbu a3, 1(a1)
-; CHECK-NEXT:    beqz a3, .LBB6_5
+; CHECK-NEXT:    beqz a3, .LBB6_6
 ; CHECK-NEXT:  # %bb.2: # %if.then
-; CHECK-NEXT:    beq a3, s5, .LBB6_5
+; CHECK-NEXT:    beq a3, s5, .LBB6_6
 ; CHECK-NEXT:  # %bb.3: # %if.then
-; CHECK-NEXT:    beq a3, s6, .LBB6_5
+; CHECK-NEXT:    beq a3, s6, .LBB6_6
 ; CHECK-NEXT:  # %bb.4: # %land.rhs
+; CHECK-NEXT:    sd s0, 48(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s1, 40(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s2, 32(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    mv s0, a0
 ; CHECK-NEXT:    mv s1, a1
 ; CHECK-NEXT:    mv s2, a2
@@ -760,83 +766,87 @@ define dso_local signext range(i32 -1, -2147483648) i32 @multi_compare(ptr nound
 ; CHECK-NEXT:    mv a2, s2
 ; CHECK-NEXT:    mv a3, a0
 ; CHECK-NEXT:    mv a0, s0
-; CHECK-NEXT:    bgez a3, .LBB6_22
-; CHECK-NEXT:  .LBB6_5: # %while.cond.preheader
-; CHECK-NEXT:    # =>This Loop Header: Depth=1
-; CHECK-NEXT:    # Child Loop BB6_6 Depth 2
-; CHECK-NEXT:    # Child Loop BB6_15 Depth 2
-; CHECK-NEXT:    addi a3, a1, 1
-; CHECK-NEXT:    mv a5, s3
-; CHECK-NEXT:  .LBB6_6: # %while.cond
-; CHECK-NEXT:    # Parent Loop BB6_5 Depth=1
-; CHECK-NEXT:    # => This Inner Loop Header: Depth=2
-; CHECK-NEXT:    lbu a4, 0(a1)
-; CHECK-NEXT:    lbu a6, 0(a5)
-; CHECK-NEXT:    beqz a4, .LBB6_13
-; CHECK-NEXT:  # %bb.7: # %while.cond
-; CHECK-NEXT:    # in Loop: Header=BB6_6 Depth=2
-; CHECK-NEXT:    beq a4, s5, .LBB6_13
-; CHECK-NEXT:  # %bb.8: # %while.cond
-; CHECK-NEXT:    # in Loop: Header=BB6_6 Depth=2
-; CHECK-NEXT:    beq a4, s6, .LBB6_13
-; CHECK-NEXT:  # %bb.9: # %land.rhs30
-; CHECK-NEXT:    # in Loop: Header=BB6_6 Depth=2
-; CHECK-NEXT:    bne a4, a6, .LBB6_11
-; CHECK-NEXT:  # %bb.10: # %while.body
-; CHECK-NEXT:    # in Loop: Header=BB6_6 Depth=2
-; CHECK-NEXT:    addi a1, a1, 1
-; CHECK-NEXT:    addi a5, a5, 1
-; CHECK-NEXT:    addi a3, a3, 1
-; CHECK-NEXT:    j .LBB6_6
-; CHECK-NEXT:  .LBB6_11: # %while.end
-; CHECK-NEXT:    # in Loop: Header=BB6_5 Depth=1
-; CHECK-NEXT:    beq a4, s6, .LBB6_13
-; CHECK-NEXT:  # %bb.12: # %while.end
-; CHECK-NEXT:    # in Loop: Header=BB6_5 Depth=1
-; CHECK-NEXT:    bnez a4, .LBB6_14
-; CHECK-NEXT:  .LBB6_13: # %land.lhs.true48
-; CHECK-NEXT:    # in Loop: Header=BB6_5 Depth=1
-; CHECK-NEXT:    beqz a6, .LBB6_21
-; CHECK-NEXT:  .LBB6_14: # %while.cond54
-; CHECK-NEXT:    # in Loop: Header=BB6_5 Depth=1
-; CHECK-NEXT:    beqz a4, .LBB6_19
-; CHECK-NEXT:  .LBB6_15: # %while.cond54
-; CHECK-NEXT:    # Parent Loop BB6_5 Depth=1
-; CHECK-NEXT:    # => This Inner Loop Header: Depth=2
-; CHECK-NEXT:    beq a4, s5, .LBB6_19
-; CHECK-NEXT:  # %bb.16: # %while.cond54
-; CHECK-NEXT:    # in Loop: Header=BB6_15 Depth=2
-; CHECK-NEXT:    beq a4, s6, .LBB6_18
-; CHECK-NEXT:  # %bb.17: # %while.body67
-; CHECK-NEXT:    # in Loop: Header=BB6_15 Depth=2
-; CHECK-NEXT:    lbu a4, 0(a3)
-; CHECK-NEXT:    addi a3, a3, 1
-; CHECK-NEXT:    bnez a4, .LBB6_15
-; CHECK-NEXT:    j .LBB6_19
-; CHECK-NEXT:  .LBB6_18: # in Loop: Header=BB6_5 Depth=1
-; CHECK-NEXT:    mv a1, a3
-; CHECK-NEXT:    lbu a3, 0(a3)
-; CHECK-NEXT:    beq a3, s4, .LBB6_1
-; CHECK-NEXT:    j .LBB6_5
-; CHECK-NEXT:  .LBB6_19: # %cleanup79.loopexit
-; CHECK-NEXT:    li a0, -1
-; CHECK-NEXT:  .LBB6_20: # %cleanup79
-; CHECK-NEXT:    ld ra, 56(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    bgez a3, .LBB6_23
+; CHECK-NEXT:  # %bb.5:
 ; CHECK-NEXT:    ld s0, 48(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s1, 40(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s2, 32(sp) # 8-byte Folded Reload
+; CHECK-NEXT:  .LBB6_6: # %while.cond.preheader
+; CHECK-NEXT:    # =>This Loop Header: Depth=1
+; CHECK-NEXT:    # Child Loop BB6_7 Depth 2
+; CHECK-NEXT:    # Child Loop BB6_16 Depth 2
+; CHECK-NEXT:    addi a3, a1, 1
+; CHECK-NEXT:    mv a5, s3
+; CHECK-NEXT:  .LBB6_7: # %while.cond
+; CHECK-NEXT:    # Parent Loop BB6_6 Depth=1
+; CHECK-NEXT:    # => This Inner Loop Header: Depth=2
+; CHECK-NEXT:    lbu a4, 0(a1)
+; CHECK-NEXT:    lbu a6, 0(a5)
+; CHECK-NEXT:    beqz a4, .LBB6_14
+; CHECK-NEXT:  # %bb.8: # %while.cond
+; CHECK-NEXT:    # in Loop: Header=BB6_7 Depth=2
+; CHECK-NEXT:    beq a4, s5, .LBB6_14
+; CHECK-NEXT:  # %bb.9: # %while.cond
+; CHECK-NEXT:    # in Loop: Header=BB6_7 Depth=2
+; CHECK-NEXT:    beq a4, s6, .LBB6_14
+; CHECK-NEXT:  # %bb.10: # %land.rhs30
+; CHECK-NEXT:    # in Loop: Header=BB6_7 Depth=2
+; CHECK-NEXT:    bne a4, a6, .LBB6_12
+; CHECK-NEXT:  # %bb.11: # %while.body
+; CHECK-NEXT:    # in Loop: Header=BB6_7 Depth=2
+; CHECK-NEXT:    addi a1, a1, 1
+; CHECK-NEXT:    addi a5, a5, 1
+; CHECK-NEXT:    addi a3, a3, 1
+; CHECK-NEXT:    j .LBB6_7
+; CHECK-NEXT:  .LBB6_12: # %while.end
+; CHECK-NEXT:    # in Loop: Header=BB6_6 Depth=1
+; CHECK-NEXT:    beq a4, s6, .LBB6_14
+; CHECK-NEXT:  # %bb.13: # %while.end
+; CHECK-NEXT:    # in Loop: Header=BB6_6 Depth=1
+; CHECK-NEXT:    bnez a4, .LBB6_15
+; CHECK-NEXT:  .LBB6_14: # %land.lhs.true48
+; CHECK-NEXT:    # in Loop: Header=BB6_6 Depth=1
+; CHECK-NEXT:    beqz a6, .LBB6_22
+; CHECK-NEXT:  .LBB6_15: # %while.cond54
+; CHECK-NEXT:    # in Loop: Header=BB6_6 Depth=1
+; CHECK-NEXT:    beqz a4, .LBB6_20
+; CHECK-NEXT:  .LBB6_16: # %while.cond54
+; CHECK-NEXT:    # Parent Loop BB6_6 Depth=1
+; CHECK-NEXT:    # => This Inner Loop Header: Depth=2
+; CHECK-NEXT:    beq a4, s5, .LBB6_20
+; CHECK-NEXT:  # %bb.17: # %while.cond54
+; CHECK-NEXT:    # in Loop: Header=BB6_16 Depth=2
+; CHECK-NEXT:    beq a4, s6, .LBB6_19
+; CHECK-NEXT:  # %bb.18: # %while.body67
+; CHECK-NEXT:    # in Loop: Header=BB6_16 Depth=2
+; CHECK-NEXT:    lbu a4, 0(a3)
+; CHECK-NEXT:    addi a3, a3, 1
+; CHECK-NEXT:    bnez a4, .LBB6_16
+; CHECK-NEXT:    j .LBB6_20
+; CHECK-NEXT:  .LBB6_19: # in Loop: Header=BB6_6 Depth=1
+; CHECK-NEXT:    mv a1, a3
+; CHECK-NEXT:    lbu a3, 0(a3)
+; CHECK-NEXT:    beq a3, s4, .LBB6_1
+; CHECK-NEXT:    j .LBB6_6
+; CHECK-NEXT:  .LBB6_20: # %cleanup79.loopexit
+; CHECK-NEXT:    li a0, -1
+; CHECK-NEXT:  .LBB6_21: # %cleanup79
+; CHECK-NEXT:    ld ra, 56(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s3, 24(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s4, 16(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s5, 8(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s6, 0(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    addi sp, sp, 64
 ; CHECK-NEXT:    ret
-; CHECK-NEXT:  .LBB6_21:
-; CHECK-NEXT:    li a0, 1
-; CHECK-NEXT:    j .LBB6_20
 ; CHECK-NEXT:  .LBB6_22:
+; CHECK-NEXT:    li a0, 1
+; CHECK-NEXT:    j .LBB6_21
+; CHECK-NEXT:  .LBB6_23:
 ; CHECK-NEXT:    mv a0, a3
-; CHECK-NEXT:    j .LBB6_20
+; CHECK-NEXT:    ld s0, 48(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s1, 40(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s2, 32(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    j .LBB6_21
 entry:
   %0 = load ptr, ptr %t, align 8
   br label %for.cond
@@ -928,16 +938,16 @@ define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unn
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    addi sp, sp, -48
 ; CHECK-NEXT:    sd ra, 40(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s0, 32(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s1, 24(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    sd s2, 16(sp) # 8-byte Folded Spill
-; CHECK-NEXT:    sd s3, 8(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    beqz a1, .LBB7_7
 ; CHECK-NEXT:  # %bb.1: # %if.end
+; CHECK-NEXT:    sd s0, 32(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    mv s0, a1
 ; CHECK-NEXT:    lbu a1, 0(a1)
 ; CHECK-NEXT:    beqz a1, .LBB7_8
 ; CHECK-NEXT:  # %bb.2: # %for.body.preheader
+; CHECK-NEXT:    sd s1, 24(sp) # 8-byte Folded Spill
+; CHECK-NEXT:    sd s3, 8(sp) # 8-byte Folded Spill
 ; CHECK-NEXT:    lui a2, 1
 ; CHECK-NEXT:    addi a3, s0, 1
 ; CHECK-NEXT:    addi a2, a2, 1285
@@ -970,11 +980,12 @@ define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unn
 ; CHECK-NEXT:    j .LBB7_10
 ; CHECK-NEXT:  .LBB7_7:
 ; CHECK-NEXT:    li s2, 0
-; CHECK-NEXT:    j .LBB7_10
+; CHECK-NEXT:    j .LBB7_11
 ; CHECK-NEXT:  .LBB7_8:
 ; CHECK-NEXT:    lui s2, %hi(.L.str.2)
 ; CHECK-NEXT:    addi s2, s2, %lo(.L.str.2)
-; CHECK-NEXT:    j .LBB7_10
+; CHECK-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    j .LBB7_11
 ; CHECK-NEXT:  .LBB7_9: # %for.end16
 ; CHECK-NEXT:    mv a0, s0
 ; CHECK-NEXT:    call strdup_new
@@ -983,12 +994,13 @@ define dso_local noundef ptr @pool_get(ptr noundef %p, ptr noundef %s) local_unn
 ; CHECK-NEXT:    mv a1, s2
 ; CHECK-NEXT:    call insert
 ; CHECK-NEXT:  .LBB7_10: # %return
-; CHECK-NEXT:    mv a0, s2
-; CHECK-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s0, 32(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s1, 24(sp) # 8-byte Folded Reload
-; CHECK-NEXT:    ld s2, 16(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld s3, 8(sp) # 8-byte Folded Reload
+; CHECK-NEXT:  .LBB7_11: # %return
+; CHECK-NEXT:    mv a0, s2
+; CHECK-NEXT:    ld ra, 40(sp) # 8-byte Folded Reload
+; CHECK-NEXT:    ld s2, 16(sp) # 8-byte Folded Reload
 ; CHECK-NEXT:    addi sp, sp, 48
 ; CHECK-NEXT:    ret
 entry:

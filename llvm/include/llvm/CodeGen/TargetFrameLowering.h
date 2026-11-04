@@ -253,6 +253,12 @@ public:
     return enableCFIFixup(MF);
   };
 
+  /// Returns true if the CFIInstrInserter pass should process \p MF, when it
+  /// is part of the pass pipeline.
+  virtual bool enableCFIInstrInserter(const MachineFunction &MF) const {
+    return true;
+  }
+
   /// Emit CFI instructions that recreate the state of the unwind information
   /// upon function entry.
   virtual void resetCFIToInitialState(MachineBasicBlock &MBB) const {}

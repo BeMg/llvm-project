@@ -2834,8 +2834,8 @@ bool RISCVFrameLowering::canUseAsEpilogue(const MachineBasicBlock &MBB) const {
          }) == 1;
 }
 
-bool RISCVFrameLowering::canShrinkWrapCSRSeparately(const MachineFunction &MF,
-                                                    MCRegister Reg) const {
+bool RISCVFrameLowering::enableSeparateCSRShrinkWrapping(
+    const MachineFunction &MF) const {
   // Only do it when optimizing for speed, as it may increase code size.
   if (!enableShrinkWrapping(MF) || MF.getFunction().hasOptSize())
     return false;
@@ -2843,9 +2843,23 @@ bool RISCVFrameLowering::canShrinkWrapCSRSeparately(const MachineFunction &MF,
   // Interrupt handlers, push/pop and the save/restore libcalls handle all
   // callee-saved registers together.
   const auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
-  if (MF.getFunction().getCallingConv() == CallingConv::GHC ||
-      MF.getFunction().hasFnAttribute("interrupt") || RVFI->isPushable(MF) ||
-      RVFI->useSaveRestoreLibCalls(MF))
+  return MF.getFunction().getCallingConv() != CallingConv::GHC &&
+         !MF.getFunction().hasFnAttribute("interrupt") &&
+         !RVFI->isPushable(MF) && !RVFI->useSaveRestoreLibCalls(MF);
+}
+
+static bool hasScalableStackObject(const MachineFrameInfo &MFI) {
+  for (int FI = MFI.getObjectIndexBegin(), E = MFI.getObjectIndexEnd(); FI < E;
+       ++FI)
+    if (!MFI.isDeadObjectIndex(FI) &&
+        MFI.getStackID(FI) == TargetStackID::ScalableVector)
+      return true;
+  return false;
+}
+
+bool RISCVFrameLowering::canShrinkWrapCSRSeparately(const MachineFunction &MF,
+                                                    MCRegister Reg) const {
+  if (!enableSeparateCSRShrinkWrapping(MF))
     return false;
 
   // Only handle scalar registers.
@@ -2867,8 +2881,11 @@ bool RISCVFrameLowering::canShrinkWrapCSRSeparately(const MachineFunction &MF,
     return true;
 
   // The separate saves and restores run in the middle of the function. They
-  // need a static frame with offsets that fit in 12 bits.
-  if (hasRVVFrameObject(MF) || !isInt<12>(MFI.estimateStackSize(MF)))
+  // need a static frame with offsets that fit in 12 bits, and no scalable
+  // objects. Look at the stack objects instead of using hasRVVFrameObject,
+  // which is true for every function when the V extension is available. This
+  // is called after register allocation, when all RVV spill slots exist.
+  if (!isInt<12>(MFI.estimateStackSize(MF)) || hasScalableStackObject(MFI))
     return false;
 
   // The spill slot must be a regular one, not one managed by the libcalls or
@@ -2903,6 +2920,21 @@ void RISCVFrameLowering::emitSeparateCSRCFI(MachineBasicBlock &MBB,
     else
       CFIBuilder.buildRestore(CS.getReg());
   }
+}
+
+bool RISCVFrameLowering::enableCFIFixup(const MachineFunction &MF) const {
+  // CFIFixup expects the callee-saved register saves and restores to be part
+  // of the prologue and epilogue.
+  return TargetFrameLowering::enableCFIFixup(MF) &&
+         !MF.getFrameInfo().isShrinkWrappedSeparately();
+}
+
+bool RISCVFrameLowering::enableCFIInstrInserter(
+    const MachineFunction &MF) const {
+  // CFIInstrInserter handles the functions CFIFixup cannot handle.
+  // -riscv-enable-cfi-instr-inserter disables CFIFixup for all functions.
+  return !MF.getTarget().Options.EnableCFIFixup ||
+         MF.getFrameInfo().isShrinkWrappedSeparately();
 }
 
 bool RISCVFrameLowering::isSupportedStackID(TargetStackID::Value ID) const {

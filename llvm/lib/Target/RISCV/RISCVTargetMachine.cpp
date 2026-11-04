@@ -540,7 +540,12 @@ void RISCVPassConfig::addPreEmitPass2() {
     return MF.getFunction().getParent()->getModuleFlag("kcfi");
   }));
 
-  if (CLOpts.enable_cfi_instr_inserter)
+  // The RISC-V shrink-wrapping pass may save callee-saved registers
+  // separately, which CFIFixup cannot handle. CFIInstrInserter handles these
+  // functions, see RISCVFrameLowering::enableCFIInstrInserter.
+  if (CLOpts.enable_cfi_instr_inserter ||
+      (TM->getOptLevel() != CodeGenOptLevel::None &&
+       CLOpts.use_new_shrink_wrap))
     addPass(createCFIInstrInserterLegacy());
 }
 

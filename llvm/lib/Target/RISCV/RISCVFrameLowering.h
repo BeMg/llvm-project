@@ -76,10 +76,16 @@ public:
                                    Register PreferredReg,
                                    Register DontUseReg = Register()) const;
 
+  /// Returns true if callee-saved registers may be saved and restored
+  /// separately from the prologue and the epilogue in \p MF.
+  bool enableSeparateCSRShrinkWrapping(const MachineFunction &MF) const;
   bool canShrinkWrapCSRSeparately(const MachineFunction &MF,
                                   MCRegister Reg) const override;
   void emitSeparateCSRCFI(MachineBasicBlock &MBB, ArrayRef<CalleeSavedInfo> CSI,
                           bool IsSave) const override;
+
+  bool enableCFIFixup(const MachineFunction &MF) const override;
+  bool enableCFIInstrInserter(const MachineFunction &MF) const override;
 
   bool isSupportedStackID(TargetStackID::Value ID) const override;
   TargetStackID::Value getStackIDForScalableVectors() const override;

@@ -74,6 +74,8 @@ defm : OptionalBoolField<"riscv-enable-shrink-wrap",
   "Enable the RISC-V shrink-wrapping pass">;
 defm : BoolField<"riscv-enable-shrink-wrap-region-split", "true",
   "Enable splitting of the restore block if possible">;
+defm : BoolField<"riscv-shrink-wrap-separate", "true",
+  "Shrink-wrap callee-saved registers separately">;
 
 // RISCVSubtarget.cpp
 defm : BoolField<"riscv-constant-pool-for-large-ints", "true",

@@ -39,7 +39,8 @@ namespace {
 class CFIInstrInserterImpl {
 public:
   bool run(MachineFunction &MF) {
-    if (!MF.needsFrameMoves())
+    if (!MF.needsFrameMoves() ||
+        !MF.getSubtarget().getFrameLowering()->enableCFIInstrInserter(MF))
       return false;
 
     // Functions with Windows unwind info have no DWARF CFI to fix up.
