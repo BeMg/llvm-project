@@ -62,18 +62,17 @@ static inline unsigned getNF(uint8_t TSFlags) {
 } // namespace RISCVRI
 
 struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
+  // The cost will be compared against BlockFrequency where entry has the
+  // value of 1 << 14. A value of 5 will choose to spill or split cold
+  // path instead of using a callee-saved register.
+  const unsigned CSRCost;
 
-  RISCVRegisterInfo(unsigned HwMode);
+  RISCVRegisterInfo(unsigned HwMode, unsigned CSRCost);
 
   const uint32_t *getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const override;
 
-  unsigned getCSRCost() const override {
-    // The cost will be compared against BlockFrequency where entry has the
-    // value of 1 << 14. A value of 5 will choose to spill or split cold
-    // path instead of using a callee-saved register.
-    return 5;
-  }
+  unsigned getCSRCost() const override { return CSRCost; }
 
   bool compareCSRFirstUseWithSpill(const MachineFunction &MF) const override;
 
