@@ -68,6 +68,8 @@ defm : BoolField<"riscv-strip-w-suffix", "true",
 defm : BoolField<"riscv-compare-csr-first-use-with-spill", "false",
   "Compare the first use of a callee-saved register with rematerializing or spilling the live range">;
 defm : BoolField<"riscv-cost-per-use", "true", "">;
+defm : ValueField<"riscv-csr-cost", "unsigned", "5",
+  "Cost of using a callee-saved register for the first time in register allocation">;
 defm : BoolField<"riscv-regalloc-hints", "true",
   "Enable two address hints for register allocation">;
 

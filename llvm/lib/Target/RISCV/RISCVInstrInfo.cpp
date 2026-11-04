@@ -69,7 +69,7 @@ namespace llvm::RISCV {
 RISCVInstrInfo::RISCVInstrInfo(const RISCVSubtarget &STI)
     : RISCVGenInstrInfo(STI, RegInfo, RISCV::ADJCALLSTACKDOWN,
                         RISCV::ADJCALLSTACKUP),
-      RegInfo(STI.getHwMode()), STI(STI) {}
+      RegInfo(STI.getHwMode(), STI.getCLOpts().csr_cost), STI(STI) {}
 
 #define GET_INSTRINFO_HELPERS
 #include "RISCVGenInstrInfo.inc"
