@@ -365,6 +365,16 @@ private:
   /// rematerialization is not possible.
   BlockFrequency calcRematCost(const LiveInterval &VirtReg,
                                AllocationOrder &Order) const;
+  /// Like tryAssignCSRFirstTime, but also compare the first use of a CSR with
+  /// rematerializing or spilling VirtReg.
+  MCRegister tryAssignCSRFirstTimeRematSpill(
+      const LiveInterval &VirtReg, AllocationOrder &Order, MCRegister PhysReg,
+      uint8_t &CostPerUseLimit, SmallVectorImpl<Register> &NewVRegs);
+  bool crossesCallInDeeperLoop(const LiveInterval &LI) const;
+  MCRegister tryEvictRematForCSR(const LiveInterval &VirtReg,
+                                 AllocationOrder &Order,
+                                 SmallVectorImpl<Register> &NewVRegs,
+                                 BlockFrequency MaxCost);
   BlockFrequency calcSpillCost(const LiveInterval &LI);
   void initializeCSRCost();
   MCRegister tryBlockSplit(const LiveInterval &, AllocationOrder &,
