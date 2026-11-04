@@ -345,6 +345,8 @@ bool PEIImpl::run(MachineFunction &MF) {
   RestoreBlocks.clear();
   MFI.clearSavePoints();
   MFI.clearRestorePoints();
+  MFI.clearCSRSaveRestorePoints();
+  MFI.clearCSRPlacement();
   return true;
 }
 
@@ -616,6 +618,126 @@ static void updateLiveness(MachineFunction &MF) {
   }
 }
 
+// Return true if \p Regs contains an entry for register \p Reg.
+static bool containsReg(ArrayRef<CalleeSavedInfo> Regs, MCRegister Reg) {
+  for (const CalleeSavedInfo &R : Regs)
+    if (R.getReg() == Reg)
+      return true;
+  return false;
+}
+
+// Add the liveIn to region between save -> restore for all CSI.
+// 1. Find the Save block and Restore MBB
+// 2. Collect the Saved MBB
+// 3. Add the liveIn into MBB
+static void updateLivenessSeparate(MachineFunction &MF) {
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  for (const CalleeSavedInfo &CS : MFI.getCalleeSavedInfo()) {
+    MCRegister Reg = CS.getReg();
+    SmallPtrSet<MachineBasicBlock *, 8> Saves, Restores;
+    for (MachineBasicBlock &MBB : MF) {
+      if (containsReg(MFI.getCalleeSavedInfoForBlock(MBB, /*IsSave=*/true),
+                      Reg))
+        Saves.insert(&MBB);
+      if (containsReg(MFI.getCalleeSavedInfoForBlock(MBB, /*IsSave=*/false),
+                      Reg))
+        Restores.insert(&MBB);
+    }
+
+    // Blocks where the register has been saved and not yet restored.
+    SmallPtrSet<MachineBasicBlock *, 16> Saved;
+    SmallVector<MachineBasicBlock *, 16> WorkList(Saves.begin(), Saves.end());
+    while (!WorkList.empty()) {
+      MachineBasicBlock *MBB = WorkList.pop_back_val();
+      if (!Saved.insert(MBB).second || Restores.count(MBB))
+        continue;
+      append_range(WorkList, MBB->successors());
+    }
+
+    for (MachineBasicBlock &MBB : MF) {
+      bool HoldsCallerValue = !Saved.count(&MBB) || Saves.count(&MBB);
+      if (HoldsCallerValue) {
+        if (!MRI.isReserved(Reg) && !MBB.isLiveIn(Reg))
+          MBB.addLiveIn(Reg);
+      } else if (CS.isSpilledToReg() && !MBB.isLiveIn(CS.getDstReg())) {
+        MBB.addLiveIn(CS.getDstReg());
+      }
+    }
+  }
+}
+
+// Return true if any block in \p Points saves or restores register \p Reg.
+static bool needSaveReg(const SaveRestorePoints &Points, MCRegister Reg) {
+  for (const auto &[MBB, Regs] : Points)
+    if (containsReg(Regs, Reg))
+      return true;
+  return false;
+}
+
+// Set the complete placement of the CSRs (see
+// MachineFrameInfo::CSRSavePlacement) if some of them are shrink-wrapped
+// separately. A CSR in the CSR save/restore points is saved and restored
+// separately only when
+//   1. the register is spilled to a stack slot, and
+//   2. the target can save and restore the register separately.
+// The other CSRs are saved and restored in the prologue/epilogue blocks.
+static void
+finalizeSeparateCSRPoints(MachineFunction &MF,
+                          ArrayRef<MachineBasicBlock *> SaveBlocks,
+                          ArrayRef<MachineBasicBlock *> RestoreBlocks) {
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  if (MFI.getCSRSavePoints().empty()) {
+    assert(MFI.getCSRRestorePoints().empty() &&
+           "CSR restore points without CSR save points");
+    return;
+  }
+
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
+  const std::vector<CalleeSavedInfo> &CSIs = MFI.getCalleeSavedInfo();
+  std::vector<CalleeSavedInfo> SeparateCSIs;
+  for (const CalleeSavedInfo &CSI : CSIs) {
+    if (CSI.isSpilledToReg() ||
+        !TFI->canShrinkWrapCSRSeparately(MF, CSI.getReg()))
+      continue;
+    bool HasSave = needSaveReg(MFI.getCSRSavePoints(), CSI.getReg());
+    assert(HasSave == needSaveReg(MFI.getCSRRestorePoints(), CSI.getReg()) &&
+           "CSR save points and restore points must be paired");
+    if (HasSave)
+      SeparateCSIs.push_back(CSI);
+  }
+  if (SeparateCSIs.empty())
+    return;
+
+  // Build the final CSRPlacement include non-separate and separate CSRs.
+  // non-separate CSRs will put in Prologue/Epilogue block.
+  auto BuildPlacement = [&](const SaveRestorePoints &SeparatePoints,
+                            ArrayRef<MachineBasicBlock *> ProEpiBlocks) {
+    SaveRestorePoints Placement;
+    for (MachineBasicBlock &MBB : MF) {
+      auto It = SeparatePoints.find(&MBB);
+      bool IsProEpiBlock = is_contained(ProEpiBlocks, &MBB);
+      std::vector<CalleeSavedInfo> Regs;
+      for (const CalleeSavedInfo &CS : CSIs) {
+        bool InThisBlock = containsReg(SeparateCSIs, CS.getReg())
+                               ? It != SeparatePoints.end() &&
+                                     containsReg(It->second, CS.getReg())
+                               : IsProEpiBlock;
+        if (InThisBlock)
+          Regs.push_back(CS);
+      }
+      if (!Regs.empty())
+        Placement.insert({&MBB, std::move(Regs)});
+    }
+    return Placement;
+  };
+
+  MFI.setCSRPlacement(BuildPlacement(MFI.getCSRSavePoints(), SaveBlocks),
+                      BuildPlacement(MFI.getCSRRestorePoints(), RestoreBlocks));
+  MFI.setShrinkWrappedSeparately(true);
+}
+
 /// Insert spill code for the callee-saved registers used in the function.
 static void insertCSRSaves(MachineBasicBlock &SaveBlock,
                            ArrayRef<CalleeSavedInfo> CSI) {
@@ -675,6 +797,26 @@ void PEIImpl::spillCalleeSavedRegs(MachineFunction &MF) {
     MFI.setCalleeSavedInfoValid(true);
 
     std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
+
+    finalizeSeparateCSRPoints(MF, SaveBlocks, RestoreBlocks);
+
+    // Each block saves and restores the CSRs given by the complete placement.
+    if (MFI.isShrinkWrappedSeparately()) {
+      if (!MFI.hasCalls())
+        NumLeafFuncWithSpills++;
+      for (MachineBasicBlock &MBB : MF) {
+        ArrayRef<CalleeSavedInfo> Saves =
+            MFI.getCalleeSavedInfoForBlock(MBB, /*IsSave=*/true);
+        if (!Saves.empty())
+          insertCSRSaves(MBB, Saves);
+        std::vector<CalleeSavedInfo> Restores =
+            MFI.getCalleeSavedInfoForBlock(MBB, /*IsSave=*/false);
+        if (!Restores.empty())
+          insertCSRRestores(MBB, Restores);
+      }
+      updateLivenessSeparate(MF);
+      return;
+    }
 
     // Fill SavePoints and RestorePoints with CalleeSavedRegisters
     if (!MFI.getSavePoints().empty()) {
@@ -1174,6 +1316,22 @@ void PEIImpl::insertPrologEpilogCode(MachineFunction &MF) {
   // Add epilogue to restore the callee-save registers in each exiting block.
   for (MachineBasicBlock *RestoreBlock : RestoreBlocks)
     TFI.emitEpilogue(MF, *RestoreBlock);
+
+  // Describe the saves and restores outside of the prologue/epilogue blocks.
+  // The prologue/epilogue emission describes the other ones.
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  if (MFI.isShrinkWrappedSeparately()) {
+    for (MachineBasicBlock &MBB : MF) {
+      ArrayRef<CalleeSavedInfo> Saves =
+          MFI.getCalleeSavedInfoForBlock(MBB, /*IsSave=*/true);
+      if (!Saves.empty() && !is_contained(SaveBlocks, &MBB))
+        TFI.emitSeparateCSRCFI(MBB, Saves, /*IsSave=*/true);
+      ArrayRef<CalleeSavedInfo> Restores =
+          MFI.getCalleeSavedInfoForBlock(MBB, /*IsSave=*/false);
+      if (!Restores.empty() && !is_contained(RestoreBlocks, &MBB))
+        TFI.emitSeparateCSRCFI(MBB, Restores, /*IsSave=*/false);
+    }
+  }
 
   for (MachineBasicBlock *SaveBlock : SaveBlocks)
     TFI.inlineStackProbe(MF, *SaveBlock);

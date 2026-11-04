@@ -195,6 +195,24 @@ public:
     return false;
   }
 
+  /// Returns true if the callee-saved register \p Reg may be saved and
+  /// restored separately from the prologue/epilogue. This is queried by the
+  /// shrink-wrapping pass, and again by prolog/epilog insertion once the
+  /// callee-saved info is valid; registers rejected at that point are saved
+  /// and restored by the prologue/epilogue.
+  virtual bool canShrinkWrapCSRSeparately(const MachineFunction &MF,
+                                          MCRegister Reg) const {
+    return false;
+  }
+
+  /// Emit the CFI describing the separate save (\p IsSave) or restore of the
+  /// callee-saved registers \p CSI in \p MBB. This is called after the frame
+  /// layout is final, for blocks that save or restore registers separately
+  /// but do not contain the prologue/epilogue.
+  virtual void emitSeparateCSRCFI(MachineBasicBlock &MBB,
+                                  ArrayRef<CalleeSavedInfo> CSI,
+                                  bool IsSave) const {}
+
   /// Returns true if the stack slot holes in the fixed and callee-save stack
   /// area should be used when allocating other stack locations to reduce stack
   /// size.

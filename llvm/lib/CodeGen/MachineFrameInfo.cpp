@@ -113,6 +113,22 @@ int MachineFrameInfo::CreateFixedSpillStackObject(uint64_t Size,
   return -++NumFixedObjects;
 }
 
+ArrayRef<CalleeSavedInfo>
+MachineFrameInfo::getCalleeSavedInfoForBlock(const MachineBasicBlock &MBB,
+                                             bool IsSave) const {
+  // The save placement is never empty when it is set: some block saves each
+  // separate register.
+  if (CSRSavePlacement.empty())
+    return CSInfo;
+
+  const SaveRestorePoints &Placement =
+      IsSave ? CSRSavePlacement : CSRRestorePlacement;
+  auto It = Placement.find_as(&MBB);
+  if (It == Placement.end())
+    return {};
+  return It->second;
+}
+
 BitVector MachineFrameInfo::getPristineRegs(const MachineFunction &MF) const {
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
   BitVector BV(TRI->getNumRegs());

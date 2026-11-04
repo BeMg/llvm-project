@@ -362,6 +362,19 @@ private:
   /// terminator.
   SaveRestorePoints CSRRestorePoints;
 
+  /// True if prolog/epilog insertion placed the save/restore code of some
+  /// callee-saved registers separately from the prologue/epilogue.
+  bool ShrinkWrappedSeparately = false;
+
+  /// The complete placement of the callee-saved registers, set by prolog/epilog
+  /// insertion when some of them are shrink-wrapped separately. For each block,
+  /// it lists all the callee-saved registers saved (resp. restored) in that
+  /// block, by the prologue (resp. epilogue) or separately. Unlike
+  /// CSRSavePoints, it also lists the prologue/epilogue blocks, and it only
+  /// lists the registers that are actually saved separately.
+  SaveRestorePoints CSRSavePlacement;
+  SaveRestorePoints CSRRestorePlacement;
+
   /// Size of the UnsafeStack Frame
   uint64_t UnsafeStackSize = 0;
 
@@ -911,6 +924,24 @@ public:
     CSRSavePoints.clear();
     CSRRestorePoints.clear();
   }
+
+  bool isShrinkWrappedSeparately() const { return ShrinkWrappedSeparately; }
+  void setShrinkWrappedSeparately(bool V) { ShrinkWrappedSeparately = V; }
+
+  void setCSRPlacement(SaveRestorePoints Saves, SaveRestorePoints Restores) {
+    CSRSavePlacement = std::move(Saves);
+    CSRRestorePlacement = std::move(Restores);
+  }
+  void clearCSRPlacement() {
+    CSRSavePlacement.clear();
+    CSRRestorePlacement.clear();
+  }
+
+  /// Return the callee-saved registers saved (\p IsSave) or restored in
+  /// \p MBB. This is the full callee-saved info unless the complete placement
+  /// is set, see CSRSavePlacement.
+  LLVM_ABI ArrayRef<CalleeSavedInfo>
+  getCalleeSavedInfoForBlock(const MachineBasicBlock &MBB, bool IsSave) const;
 
   uint64_t getUnsafeStackSize() const { return UnsafeStackSize; }
   void setUnsafeStackSize(uint64_t Size) { UnsafeStackSize = Size; }

@@ -76,6 +76,11 @@ public:
                                    Register PreferredReg,
                                    Register DontUseReg = Register()) const;
 
+  bool canShrinkWrapCSRSeparately(const MachineFunction &MF,
+                                  MCRegister Reg) const override;
+  void emitSeparateCSRCFI(MachineBasicBlock &MBB, ArrayRef<CalleeSavedInfo> CSI,
+                          bool IsSave) const override;
+
   bool isSupportedStackID(TargetStackID::Value ID) const override;
   TargetStackID::Value getStackIDForScalableVectors() const override;
 
