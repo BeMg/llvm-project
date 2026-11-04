@@ -892,6 +892,14 @@ public:
     return 30;
   }
 
+  /// Return true if the greedy register allocator should compare the first
+  /// use of a callee-saved register with more choices than a pre-split, such
+  /// as rematerializing or spilling the live range (see
+  /// RAGreedy::tryAssignCSRFirstTimeRematSpill).
+  virtual bool compareCSRFirstUseWithSpill(const MachineFunction &MF) const {
+    return false;
+  }
+
   /// Returns true if the target requires (and can make use of) the register
   /// scavenger.
   virtual bool requiresRegisterScavenging(const MachineFunction &MF) const {

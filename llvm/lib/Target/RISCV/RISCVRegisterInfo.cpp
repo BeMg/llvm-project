@@ -55,6 +55,13 @@ RISCVRegisterInfo::getIPRACSRegs(const MachineFunction *MF) const {
   return CSR_IPRA_SaveList;
 }
 
+bool RISCVRegisterInfo::compareCSRFirstUseWithSpill(
+    const MachineFunction &MF) const {
+  return MF.getSubtarget<RISCVSubtarget>()
+      .getCLOpts()
+      .compare_csr_first_use_with_spill;
+}
+
 const MCPhysReg *
 RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   auto &Subtarget = MF->getSubtarget<RISCVSubtarget>();

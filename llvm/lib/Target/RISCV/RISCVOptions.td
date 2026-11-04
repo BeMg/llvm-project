@@ -65,6 +65,8 @@ defm : BoolField<"riscv-strip-w-suffix", "true",
   "Enable strip W suffix">;
 
 // RISCVRegisterInfo.cpp
+defm : BoolField<"riscv-compare-csr-first-use-with-spill", "false",
+  "Compare the first use of a callee-saved register with rematerializing or spilling the live range">;
 defm : BoolField<"riscv-cost-per-use", "true", "">;
 defm : BoolField<"riscv-regalloc-hints", "true",
   "Enable two address hints for register allocation">;
