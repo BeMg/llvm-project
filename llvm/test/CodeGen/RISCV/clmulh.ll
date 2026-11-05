@@ -1643,14 +1643,14 @@ define i32 @clmulh_i32(i32 %a, i32 %b) nounwind {
 ; RV32IM-NEXT:    and t4, a7, a0
 ; RV32IM-NEXT:    mul t5, t2, t1
 ; RV32IM-NEXT:    mul t6, t4, t3
-; RV32IM-NEXT:    lui s0, 559241
-; RV32IM-NEXT:    lui s1, 279620
-; RV32IM-NEXT:    addi s0, s0, -1912
-; RV32IM-NEXT:    addi s1, s1, 1092
-; RV32IM-NEXT:    and s2, a6, s0
-; RV32IM-NEXT:    and s3, a7, s1
-; RV32IM-NEXT:    and a6, a6, s1
-; RV32IM-NEXT:    and a7, a7, s0
+; RV32IM-NEXT:    lui s1, 559241
+; RV32IM-NEXT:    lui s0, 279620
+; RV32IM-NEXT:    addi s1, s1, -1912
+; RV32IM-NEXT:    addi s0, s0, 1092
+; RV32IM-NEXT:    and s2, a6, s1
+; RV32IM-NEXT:    and s3, a7, s0
+; RV32IM-NEXT:    and a6, a6, s0
+; RV32IM-NEXT:    and a7, a7, s1
 ; RV32IM-NEXT:    mul s4, s3, s2
 ; RV32IM-NEXT:    mul s5, a7, a6
 ; RV32IM-NEXT:    mul s6, t2, s2
@@ -1679,8 +1679,8 @@ define i32 @clmulh_i32(i32 %a, i32 %b) nounwind {
 ; RV32IM-NEXT:    xor a7, t3, a7
 ; RV32IM-NEXT:    xor t1, t1, t2
 ; RV32IM-NEXT:    xor a6, a6, a7
-; RV32IM-NEXT:    and a7, t1, s1
-; RV32IM-NEXT:    and a6, a6, s0
+; RV32IM-NEXT:    and a7, t1, s0
+; RV32IM-NEXT:    and a6, a6, s1
 ; RV32IM-NEXT:    or a0, a0, t0
 ; RV32IM-NEXT:    or a6, a7, a6
 ; RV32IM-NEXT:    or a0, a0, a6
@@ -1877,14 +1877,14 @@ define i32 @clmulh_i32(i32 %a, i32 %b) nounwind {
 ; RV32IMZBS-NEXT:    and t4, a7, a0
 ; RV32IMZBS-NEXT:    mul t5, t2, t1
 ; RV32IMZBS-NEXT:    mul t6, t4, t3
-; RV32IMZBS-NEXT:    lui s0, 559241
-; RV32IMZBS-NEXT:    lui s1, 279620
-; RV32IMZBS-NEXT:    addi s0, s0, -1912
-; RV32IMZBS-NEXT:    addi s1, s1, 1092
-; RV32IMZBS-NEXT:    and s2, a6, s0
-; RV32IMZBS-NEXT:    and s3, a7, s1
-; RV32IMZBS-NEXT:    and a6, a6, s1
-; RV32IMZBS-NEXT:    and a7, a7, s0
+; RV32IMZBS-NEXT:    lui s1, 559241
+; RV32IMZBS-NEXT:    lui s0, 279620
+; RV32IMZBS-NEXT:    addi s1, s1, -1912
+; RV32IMZBS-NEXT:    addi s0, s0, 1092
+; RV32IMZBS-NEXT:    and s2, a6, s1
+; RV32IMZBS-NEXT:    and s3, a7, s0
+; RV32IMZBS-NEXT:    and a6, a6, s0
+; RV32IMZBS-NEXT:    and a7, a7, s1
 ; RV32IMZBS-NEXT:    mul s4, s3, s2
 ; RV32IMZBS-NEXT:    mul s5, a7, a6
 ; RV32IMZBS-NEXT:    mul s6, t2, s2
@@ -1913,8 +1913,8 @@ define i32 @clmulh_i32(i32 %a, i32 %b) nounwind {
 ; RV32IMZBS-NEXT:    xor a7, t3, a7
 ; RV32IMZBS-NEXT:    xor t1, t1, t2
 ; RV32IMZBS-NEXT:    xor a6, a6, a7
-; RV32IMZBS-NEXT:    and a7, t1, s1
-; RV32IMZBS-NEXT:    and a6, a6, s0
+; RV32IMZBS-NEXT:    and a7, t1, s0
+; RV32IMZBS-NEXT:    and a6, a6, s1
 ; RV32IMZBS-NEXT:    or a0, a0, t0
 ; RV32IMZBS-NEXT:    or a6, a7, a6
 ; RV32IMZBS-NEXT:    or a0, a0, a6
@@ -2124,14 +2124,14 @@ define i32 @clmulh_i32(i32 %a, i32 %b) nounwind {
 ; RV32IMZVBC-NEXT:    and t4, a7, a0
 ; RV32IMZVBC-NEXT:    mul t5, t2, t1
 ; RV32IMZVBC-NEXT:    mul t6, t4, t3
-; RV32IMZVBC-NEXT:    lui s0, 559241
-; RV32IMZVBC-NEXT:    lui s1, 279620
-; RV32IMZVBC-NEXT:    addi s0, s0, -1912
-; RV32IMZVBC-NEXT:    addi s1, s1, 1092
-; RV32IMZVBC-NEXT:    and s2, a6, s0
-; RV32IMZVBC-NEXT:    and s3, a7, s1
-; RV32IMZVBC-NEXT:    and a6, a6, s1
-; RV32IMZVBC-NEXT:    and a7, a7, s0
+; RV32IMZVBC-NEXT:    lui s1, 559241
+; RV32IMZVBC-NEXT:    lui s0, 279620
+; RV32IMZVBC-NEXT:    addi s1, s1, -1912
+; RV32IMZVBC-NEXT:    addi s0, s0, 1092
+; RV32IMZVBC-NEXT:    and s2, a6, s1
+; RV32IMZVBC-NEXT:    and s3, a7, s0
+; RV32IMZVBC-NEXT:    and a6, a6, s0
+; RV32IMZVBC-NEXT:    and a7, a7, s1
 ; RV32IMZVBC-NEXT:    mul s4, s3, s2
 ; RV32IMZVBC-NEXT:    mul s5, a7, a6
 ; RV32IMZVBC-NEXT:    mul s6, t2, s2
@@ -2160,8 +2160,8 @@ define i32 @clmulh_i32(i32 %a, i32 %b) nounwind {
 ; RV32IMZVBC-NEXT:    xor a7, t3, a7
 ; RV32IMZVBC-NEXT:    xor t1, t1, t2
 ; RV32IMZVBC-NEXT:    xor a6, a6, a7
-; RV32IMZVBC-NEXT:    and a7, t1, s1
-; RV32IMZVBC-NEXT:    and a6, a6, s0
+; RV32IMZVBC-NEXT:    and a7, t1, s0
+; RV32IMZVBC-NEXT:    and a6, a6, s1
 ; RV32IMZVBC-NEXT:    or a0, a0, t0
 ; RV32IMZVBC-NEXT:    or a6, a7, a6
 ; RV32IMZVBC-NEXT:    or a0, a0, a6
