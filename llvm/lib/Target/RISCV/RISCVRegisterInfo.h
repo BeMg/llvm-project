@@ -68,11 +68,7 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
   const uint32_t *getCallPreservedMask(const MachineFunction &MF,
                                        CallingConv::ID) const override;
 
-  unsigned getCSRCost() const override {
-    // The cost will be compared against BlockFrequency where entry has the
-    // value of 1 << 14. 32768 mean (1 << 14) * 2 instruction.
-    return 32768;
-  }
+  unsigned getCSRCost() const override;
 
   bool enableCSRFirstTimeMinCost(const MachineFunction &MF) const override;
 

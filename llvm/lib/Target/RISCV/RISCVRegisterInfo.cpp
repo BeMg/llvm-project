@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/TargetFrameLowering.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #define GET_REGINFO_TARGET_DESC
@@ -55,9 +56,23 @@ RISCVRegisterInfo::getIPRACSRegs(const MachineFunction *MF) const {
   return CSR_IPRA_SaveList;
 }
 
+// The cost will be compared against BlockFrequency where entry has the
+// value of 1 << 14. 32768 means (1 << 14) * 2 instructions.
+static cl::opt<unsigned>
+    CSRCost("riscv-csr-cost", cl::Hidden, cl::init(32768),
+            cl::desc("Cost of the first use of a callee-saved register, "
+                     "compared against block frequency (entry is 1 << 14)"));
+
+static cl::opt<bool> CompareCSRFirstUseWithSpill(
+    "riscv-compare-csr-first-use-with-spill", cl::Hidden, cl::init(true),
+    cl::desc("Compare the cost of the first use of a callee-saved register "
+             "with the cost of spilling or splitting"));
+
+unsigned RISCVRegisterInfo::getCSRCost() const { return CSRCost; }
+
 bool RISCVRegisterInfo::enableCSRFirstTimeMinCost(
     const MachineFunction &MF) const {
-  return true;
+  return CompareCSRFirstUseWithSpill;
 }
 
 const MCPhysReg *
